@@ -227,7 +227,8 @@ def compute_pull_list(store: Store, case: RecallCase) -> PullList:
     shipped_total = sum(i.cases for i in items if i.agency_id)
     summary_bits = [
         f"{on_hand_total} cases on hand (HOLD tag applied)" if on_hand_total else "nothing on hand",
-        f"{shipped_total} cases shipped to {len(agencies)} agencies" if shipped_total else "nothing shipped",
+        (f"{shipped_total} cases shipped to {len(agencies)} " + ("agency" if len(agencies) == 1 else "agencies"))
+        if shipped_total else "nothing shipped",
     ]
     if widened:
         summary_bits.append("no lot on the receipt, so the whole line is treated as affected (rule 4)")
@@ -534,17 +535,25 @@ def ping_text(case: RecallCase, store: Optional[Store] = None) -> str:
                 span = f" {_md(dates[0])}"
             elif dates:
                 span = f" {_md(dates[0])}-{_md(dates[-1])}"
-            line = f"{shipped} shipped to {len(pull.agencies_affected)} agencies{span}"
+            n_ag = len(pull.agencies_affected)
+            line = f"{shipped} shipped to {n_ag} {'agency' if n_ag == 1 else 'agencies'}{span}"
             if any("same-day" in (i.note or "") for i in shipped_rows):
                 line += "; one distributes same-day"
             lines.append(line + ".")
         if any(i.physical_sort_required for i in pull.items):
             lines.append("One row is salvage/repack with no lot lineage: physical sort required.")
 
-    lines.append(
-        f"Pull list, {len(case.notices)} agency notice{'s' if len(case.notices) != 1 else ''}, "
-        f"and {len(case.signs)} shelf sign{'s' if len(case.signs) != 1 else ''} drafted. Send?"
-    )
+    status = getattr(case, "status", None)
+    status_value = getattr(status, "value", status)
+    if status_value == CaseStatus.NEEDS_HUMAN.value:
+        lines.append("One ledger row is ambiguous. Answer the question below and the run continues; nothing is sent until you do.")
+    elif status_value == CaseStatus.DISMISSED.value:
+        lines.append(f"Dismissed without a ping: {case.dismissed_reason or 'no ledger match'}.")
+    else:
+        lines.append(
+            f"Pull list, {len(case.notices)} agency notice{'s' if len(case.notices) != 1 else ''}, "
+            f"and {len(case.signs)} shelf sign{'s' if len(case.signs) != 1 else ''} drafted. Send?"
+        )
     return " ".join(lines)
 
 

@@ -15,7 +15,7 @@
   </div>
 
   <div class="btn-row" style="margin-bottom: 24px;">
-    <button class="btn" id="run-scan" {% if active_job %}aria-disabled="true"{% endif %}>Run daily scan</button>
+    <button class="btn" id="run-scan" data-last-job="{{ last_job or '' }}" {% if active_job %}aria-disabled="true"{% endif %}>Run daily scan</button>
     <span class="caption"><span class="livedot" id="livedot"></span><span id="livelabel">idle</span></span>
     <span class="caption">· {{ budget_used }}/{{ budget_limit }} agent runs used today</span>
   </div>

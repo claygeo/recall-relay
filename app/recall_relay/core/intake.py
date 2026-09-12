@@ -875,6 +875,7 @@ def parse_openfda_payload(payload: dict) -> list[OpenFDAEnrichment]:
             status=(res.get("status") or "").strip(),
             product_description=(res.get("product_description") or "").strip(),
             recalling_firm=(res.get("recalling_firm") or "").strip(),
+            reason_for_recall=(res.get("reason_for_recall") or "").strip(),
         ))
     return out
 

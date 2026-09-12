@@ -257,7 +257,18 @@ NON_FOOD_HINTS = re.compile(
 )
 
 
+UNAMBIGUOUS_NON_FOOD = re.compile(
+    r"\b(injection|injectable|firmware|medical device|pet food|dog food|cat food|supplements? for (?:dogs|cats|pets))\b",
+    re.I,
+)
+
+
 def looks_like_food(title: str, product_type: str) -> bool:
+    """Rule 6 helper. Product Type decides, except that an unambiguous non-food title always loses:
+    FDA has tagged an epinephrine injection as 'Food & Beverages'. Supplements stay food (they are
+    FDA-regulated food, and a silent drop is the expensive failure)."""
+    if UNAMBIGUOUS_NON_FOOD.search(title or ""):
+        return False
     if product_type and "food" in product_type.lower() and "pet" not in product_type.lower():
         return True
     if product_type and "food" not in product_type.lower():

@@ -33,7 +33,15 @@ async def ledger(request: Request, dist: int = 1) -> Response:
 # ---------------------------------------------------------------------------
 @router.get("/run")
 async def run(request: Request) -> Response:
-    return render(request, "run.html", tab="run")
+    # The last finished scan is replayed on load so the tally and log survive a page refresh.
+    from .api import JOBS
+
+    last_job = ""
+    for job in reversed(list(JOBS.values())):
+        if job.finished:
+            last_job = job.id
+            break
+    return render(request, "run.html", tab="run", last_job=last_job)
 
 
 # ---------------------------------------------------------------------------

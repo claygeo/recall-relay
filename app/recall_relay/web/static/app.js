@@ -188,5 +188,13 @@
   }
 
   var pending = document.body ? document.body.dataset.activeJob : "";
-  if (pending) attach(pending);
+  if (pending) {
+    attach(pending);
+  } else if (runButton && runButton.dataset.lastJob) {
+    // No scan in flight: replay the last finished run so the tally and log survive a refresh.
+    var log = el("log");
+    if (log) log.innerHTML = "";
+    line("replaying the last completed run (job " + runButton.dataset.lastJob + ")", "feed");
+    attach(runButton.dataset.lastJob);
+  }
 })();

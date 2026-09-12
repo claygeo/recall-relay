@@ -157,6 +157,7 @@ class OpenFDAEnrichment(BaseModel):
     status: str = ""
     product_description: str = ""
     recalling_firm: str = ""
+    reason_for_recall: str = ""
 
 
 # ---------------------------------------------------------------------------

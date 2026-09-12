@@ -142,12 +142,7 @@ def openfda_snapshot_records() -> list[dict]:
 
 
 def enrichment_to_record(enr: OpenFDAEnrichment) -> dict:
-    """Live `openfda_lookup` returns typed enrichments; normalize them to the raw record shape.
-
-    `OpenFDAEnrichment` carries no `reason_for_recall`, so a live-only record reaches the matcher without
-    the hazard text. That is a one-line gap in `intake.parse_openfda_payload`, not something to paper over
-    here -- the field is left empty rather than guessed.
-    """
+    """Live `openfda_lookup` returns typed enrichments; normalize them to the raw record shape."""
     return {
         "recall_number": enr.recall_number,
         "classification": enr.classification.value if enr.classification else "",
@@ -157,7 +152,7 @@ def enrichment_to_record(enr: OpenFDAEnrichment) -> dict:
         "distribution_pattern": enr.distribution_pattern,
         "status": enr.status,
         "product_type": "Food",
-        "reason_for_recall": "",
+        "reason_for_recall": getattr(enr, "reason_for_recall", "") or "",
         "recall_initiation_date": enr.recall_initiation_date.strftime("%Y%m%d") if enr.recall_initiation_date else "",
         "report_date": enr.report_date.strftime("%Y%m%d") if enr.report_date else "",
     }
