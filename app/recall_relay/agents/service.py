@@ -21,11 +21,14 @@ An "item" event always carries a decision and is the last event for that item.
 from __future__ import annotations
 
 import inspect
+import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Literal, Optional
+
+from rapidfuzz import fuzz
 
 from ..core import intake, rules
 from ..core.config import settings
@@ -33,6 +36,9 @@ from ..core.models import (
     AuditPacket,
     CallScript,
     CaseStatus,
+    Classification,
+    OpenFDAEnrichment,
+    ProductLine,
     RecallCase,
     RecallNotice,
     ResponseStatus,
@@ -53,6 +59,14 @@ from .orchestrator import (
 from .mailer import get_mailer, send_and_record
 
 SNAPSHOT_RSS = "rss/recalls-2026-09-11.xml"  # relative to settings.fixtures_dir
+SNAPSHOT_OPENFDA = "openfda"  # every pinned enforcement payload in this directory
+OPENFDA_RECORD_URL = intake.OPENFDA_URL + '?search=recall_number:"{recall_number}"'
+
+# How close two product lines must read before an openFDA record is treated as the SAME recall as an
+# existing case (rule 1: earliest source owns the case, openFDA only enriches). Firm alone is not
+# enough: the hero firm has two live recalls in these fixtures -- the Triple Berry press release and
+# the July blueberries enforcement record -- and collapsing them would lose a real match.
+SAME_RECALL_PRODUCT_RATIO = 88.0
 
 # ---------------------------------------------------------------------------
 # small helpers
@@ -114,6 +128,203 @@ UNAMBIGUOUS_NON_FOOD = re.compile(
 )
 
 
+# ---------------------------------------------------------------------------
+# openFDA: the weekly enforcement sweep
+# ---------------------------------------------------------------------------
+_DESC_TAIL = re.compile(
+    r"\b(?:distributed|manufactured|packed|produced|packaged|imported)\s+by\b|"
+    r"\bkeep\s+frozen\b|\bkeep\s+refrigerated\b",
+    re.I,
+)
+_NET_WT = re.compile(r"\b(?:net\s*(?:wt\.?|weight)|net)\b[\s:.]*", re.I)
+
+
+def openfda_snapshot_records() -> list[dict]:
+    """Every pinned openFDA enforcement record, merged by recall number.
+
+    The demo needs a reproducible sweep for the same reason it needs a pinned RSS snapshot (DECISIONS #6):
+    openFDA's classification lag means the interesting records rotate out of a live query.
+    """
+    out: dict[str, dict] = {}
+    directory = Path(settings.fixtures_dir) / SNAPSHOT_OPENFDA
+    if not directory.exists():
+        return []
+    for path in sorted(directory.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
+        except (OSError, ValueError):  # pragma: no cover - unreadable fixture
+            continue
+        records = payload.get("results", []) if isinstance(payload, dict) else payload
+        for record in records or []:
+            number = (record.get("recall_number") or "").strip()
+            if number:
+                out.setdefault(number, record)
+    return list(out.values())
+
+
+def enrichment_to_record(enr: OpenFDAEnrichment) -> dict:
+    """Live `openfda_lookup` returns typed enrichments; normalize them to the raw record shape.
+
+    `OpenFDAEnrichment` carries no `reason_for_recall`, so a live-only record reaches the matcher without
+    the hazard text. That is a one-line gap in `intake.parse_openfda_payload`, not something to paper over
+    here -- the field is left empty rather than guessed.
+    """
+    return {
+        "recall_number": enr.recall_number,
+        "classification": enr.classification.value if enr.classification else "",
+        "recalling_firm": enr.recalling_firm,
+        "product_description": enr.product_description,
+        "code_info": enr.code_info,
+        "distribution_pattern": enr.distribution_pattern,
+        "status": enr.status,
+        "product_type": "Food",
+        "reason_for_recall": "",
+        "recall_initiation_date": enr.recall_initiation_date.strftime("%Y%m%d") if enr.recall_initiation_date else "",
+        "report_date": enr.report_date.strftime("%Y%m%d") if enr.report_date else "",
+    }
+
+
+def split_product_description(description: str) -> tuple[str, str]:
+    """Best-effort (name, size) from an openFDA product_description.
+
+    Brand is deliberately NOT guessed -- same rule the extractor works under. An openFDA description is a
+    warehouse label, not a marketing line, and a guessed brand is a wrong pallet.
+    """
+    text = (description or "").strip()
+    if not text:
+        return "", ""
+    sizes = intake.extract_sizes(text)
+    size = sizes[0] if sizes else ""
+
+    cut = _DESC_TAIL.search(text)
+    if cut:
+        text = text[: cut.start()]
+    head = text.split(",")[0].strip()
+    if len(head.split()) < 3 and "," in text:
+        head = ",".join(text.split(",")[:2]).strip()
+    head = _NET_WT.sub(" ", head)
+    if size:
+        head = re.sub(re.escape(size).replace(r"\ ", r"\s*"), " ", head, flags=re.I)
+    head = re.sub(r"\s+", " ", head).strip(" ,.;:-")
+    return head or text[:80].strip(), size
+
+
+def notice_from_openfda(record: dict, seen_at: Optional[datetime] = None) -> tuple[RecallNotice, OpenFDAEnrichment]:
+    """Turn one enforcement record into a RecallNotice plus the typed enrichment it came from.
+
+    Date modelling, deliberately: `announcement_date` is left unset and `publish_date` is the openFDA
+    report date. The candidate window is anchored on the announcement when there is one, and anchoring an
+    enforcement record on its recall_initiation_date would blind the sweep to exactly the receipts this
+    channel exists to catch -- the ones logged during openFDA's ~33-day classification lag. Nothing is
+    lost: the initiation date rides along on the enrichment attached to the case.
+    """
+    number = (record.get("recall_number") or "").strip()
+    description = (record.get("product_description") or "").strip()
+    name, size = split_product_description(description)
+    code_info = (record.get("code_info") or "").strip()
+    pattern = (record.get("distribution_pattern") or "").strip()
+
+    classification = None
+    raw_class = (record.get("classification") or "").strip()
+    if raw_class:
+        try:
+            classification = Classification(raw_class)
+        except ValueError:
+            classification = None
+
+    notice = RecallNotice(
+        source=Source.OPENFDA,
+        source_url=OPENFDA_RECORD_URL.format(recall_number=number) if number else "",
+        source_seen_at=seen_at or datetime.now(timezone.utc),
+        recall_number=number,
+        event_id=(record.get("event_id") or "").strip(),
+        firm=(record.get("recalling_firm") or "").strip(),
+        products=[
+            ProductLine(
+                brand="",
+                name=name or description[:80],
+                size=size,
+                lots=intake.extract_lots(code_info),
+                best_by=intake.extract_best_by(code_info),
+            )
+        ],
+        reason=(record.get("reason_for_recall") or "").strip(),
+        classification=classification,
+        product_type=(record.get("product_type") or "Food") + " & Beverages",
+        publish_date=intake._parse_date(record.get("report_date") or ""),
+        distribution_states=intake.extract_states(pattern),
+        distribution_text=pattern,
+        disposition_verbatim="",
+        is_food=(record.get("product_type") or "Food").strip().lower().startswith("food"),
+        raw_excerpt=description[:1500],
+        extraction_confidence=1.0,
+        title=f"{(record.get('recalling_firm') or '').strip()} - {name or description[:60]}",
+    )
+    enrichment = OpenFDAEnrichment(
+        recall_number=number,
+        classification=classification,
+        code_info=code_info,
+        distribution_pattern=pattern,
+        recall_initiation_date=intake._parse_date(record.get("recall_initiation_date") or ""),
+        report_date=intake._parse_date(record.get("report_date") or ""),
+        status=(record.get("status") or "").strip(),
+        product_description=description,
+        recalling_firm=(record.get("recalling_firm") or "").strip(),
+    )
+    return notice, enrichment
+
+
+def _product_names(notice: RecallNotice) -> list[str]:
+    return [f"{p.brand} {p.name}".strip() for p in notice.products if (p.name or p.brand)]
+
+
+def find_same_recall_case(store: Store, notice: RecallNotice) -> Optional[RecallCase]:
+    """Rule 1: the earliest source owns the case. Match on recall number, then firm + product line."""
+    if notice.recall_number:
+        found = store.find_case_by_source(notice.recall_number)
+        if found is not None:
+            return found
+    if notice.source_url:
+        found = store.find_case_by_source(notice.source_url)
+        if found is not None:
+            return found
+
+    firm = rules._norm(notice.firm)
+    if not firm:
+        return None
+    mine = [rules._norm(n) for n in _product_names(notice)]
+    for case in store.list_cases(include_drills=False):
+        if rules._norm(case.notice.firm) != firm:
+            continue
+        theirs = [rules._norm(n) for n in _product_names(case.notice)]
+        for a in mine:
+            for b in theirs:
+                if a and b and fuzz.token_set_ratio(a, b) >= SAME_RECALL_PRODUCT_RATIO:
+                    return case
+    return None
+
+
+def attach_enrichment(store: Store, case: RecallCase, enr: OpenFDAEnrichment) -> RecallCase:
+    """Rule 1: an openFDA record for a case we already have enriches it and never re-pings."""
+    case.enrichment = enr
+    notes = [f"openFDA {enr.recall_number or '(no number)'} status={enr.status or '?'}"]
+    if enr.recall_number and not case.notice.recall_number:
+        case.notice.recall_number = enr.recall_number
+        notes.append(f"recall number filled in: {enr.recall_number}")
+    if enr.classification is not None:
+        if case.notice.classification is None and case.approved_at is None:
+            case.notice.classification = enr.classification
+            notes.append(f"classification set to {enr.classification.value}")
+        elif case.notice.classification is None:
+            notes.append(
+                f"classification {enr.classification.value} recorded but NOT applied: notices already "
+                f"went out under the Class I assumption, and the cadence they were sent under stands"
+            )
+    store.save_case(case)
+    store.audit(case.id, "system", "enriched", "; ".join(notes) + " (no re-ping, rule 1)")
+    return case
+
+
 def next_case_id(store: Store, *, drill: bool = False) -> str:
     """RC-YYYY-MMDD-NNN, sequential within the day."""
     today = store.now().date()
@@ -142,13 +353,89 @@ def notice_from_raw(raw: Any, source: Source, seen_at: Optional[datetime] = None
 # ---------------------------------------------------------------------------
 # the scan
 # ---------------------------------------------------------------------------
-async def scan(store: Store, *, live: bool = True, snapshot: bool = True) -> AsyncIterator[dict]:
-    """Walk the FDA recall feed and run the procedure on anything that touches this food bank.
+def _dismiss_without_asking(store: Store, notice: RecallNotice, reason: str) -> RecallCase:
+    """Open a case purely so the decision is on the record, then close it. Nobody is pinged (rule 8)."""
+    case = _open_case(store, notice)
+    case.status = CaseStatus.DISMISSED
+    case.dismissed_reason = reason
+    case.closed_at = store.now()
+    store.save_case(case)
+    store.audit(case.id, "system", "dismissed", reason)
+    return case
 
-    The pinned snapshot is the base so the demo reproduces; live items are additive and de-duplicated by
-    link. Non-food is skipped, a recall whose distribution excludes our state and whose brand we never
-    received is dismissed silently (rule 8), and everything else becomes a case.
+
+async def work_notice(
+    store: Store,
+    notice: RecallNotice,
+    *,
+    agent_factory: Optional[Callable[[], Any]] = None,
+    invocation_extras: Optional[dict] = None,
+) -> tuple[RecallCase, str, str, list[dict]]:
+    """Gate, score, and only then spend a model. Returns (case, decision, reason, agent events).
+
+    Two deterministic exits before any agent runs:
+
+    * the distribution gate (rule 8) -- the recall never reached our state and we never received the brand;
+    * zero candidates above the floor -- the matcher would return NO_MATCH without a model call anyway
+      (`matcher.adjudicate` short-circuits on an empty candidate list), so running a whole orchestrator to
+      reach the same answer would be paying for arithmetic. This is what makes the weekly openFDA sweep
+      affordable: dozens of records, a handful of model calls.
     """
+    auto_dismiss, reason = rules.distribution_gate(notice, settings.food_bank_state, store.ledger_brands())
+    if auto_dismiss:
+        case = _dismiss_without_asking(store, notice, f"distribution gate (rule 8): {reason}")
+        return case, "dismissed", reason, []
+
+    if not rules.score_candidates(store.list_receipts(), notice):
+        reason = "no ledger row scored above the candidate floor"
+        case = _dismiss_without_asking(store, notice, reason)
+        return case, "dismissed", reason, []
+
+    events: list[dict] = []
+    case = await process_notice(
+        store,
+        notice,
+        event_sink=events.append,
+        orchestrator=agent_factory() if agent_factory is not None else None,
+        invocation_extras=invocation_extras,
+    )
+    return case, "processed", "", events
+
+
+def _count_outcome(tally: dict, case: RecallCase) -> None:
+    tally["processed"] += 1
+    if case.status == CaseStatus.DISMISSED:
+        tally["dismissed"] += 1
+    elif case.status == CaseStatus.NEEDS_HUMAN:
+        tally["needs_human"] += 1
+    elif case.status == CaseStatus.AWAITING_APPROVAL:
+        tally["awaiting_approval"] += 1
+
+
+async def scan(
+    store: Store,
+    *,
+    live: bool = True,
+    snapshot: bool = True,
+    openfda: bool = True,
+    agent_factory: Optional[Callable[[], Any]] = None,
+    invocation_extras: Optional[dict] = None,
+) -> AsyncIterator[dict]:
+    """Walk both FDA feeds and run the procedure on anything that touches this food bank.
+
+    Three sources, in rule-1 order (earliest source owns the case):
+
+    1. the pinned RSS snapshot -- same-day press releases, so the demo reproduces on camera;
+    2. the live RSS feed -- additive, de-duplicated by link;
+    3. the openFDA enforcement sweep -- the weekly ledger. Normally enrichment only, but it is also the
+       ONLY source for a recall that never got a press release, and those are not rare. An openFDA record
+       that matches a case we already have attaches to it and never re-pings.
+
+    Non-food is skipped, a recall whose distribution excludes our state and whose brand we never received
+    is dismissed silently (rule 8), and everything else becomes a case.
+    """
+    agent_kwargs = {"agent_factory": agent_factory, "invocation_extras": invocation_extras}
+
     items: list[intake.RssItem] = []
     seen_links: set[str] = set()
 
@@ -193,16 +480,22 @@ async def scan(store: Store, *, live: bool = True, snapshot: bool = True) -> Asy
         "seen": len(items),
         "already_seen": 0,
         "skipped_non_food": 0,
+        "skipped_out_of_area": 0,
         "dismissed": 0,
+        "enriched": 0,
         "processed": 0,
         "needs_human": 0,
         "awaiting_approval": 0,
         "errors": 0,
+        "openfda_seen": 0,
     }
 
     total = len(items)
     for index, item in enumerate(items, start=1):
-        base = {"type": "item", "index": index, "total": total, "title": item.title, "link": item.link}
+        base = {
+            "type": "item", "index": index, "total": total, "source": "rss",
+            "title": item.title, "link": item.link,
+        }
 
         existing = store.find_case_by_source(item.link)
         if existing is not None:
@@ -236,20 +529,6 @@ async def scan(store: Store, *, live: bool = True, snapshot: bool = True) -> Asy
                 continue
 
             notice = notice_from_raw(raw, Source.FDA_RSS, item.published)
-
-            auto_dismiss, reason = rules.distribution_gate(
-                notice, settings.food_bank_state, store.ledger_brands()
-            )
-            if auto_dismiss:
-                case = _open_case(store, notice)
-                case.status = CaseStatus.DISMISSED
-                case.dismissed_reason = reason
-                case.closed_at = store.now()
-                store.save_case(case)
-                store.audit(case.id, "system", "dismissed", f"distribution gate (rule 8): {reason}")
-                tally["dismissed"] += 1
-                yield {**base, "decision": "dismissed", "case_id": case.id, "reason": reason}
-                continue
         except NotImplementedError as exc:
             tally["errors"] += 1
             yield {**base, "decision": "error", "error": f"intake not implemented: {exc}"}
@@ -259,20 +538,103 @@ async def scan(store: Store, *, live: bool = True, snapshot: bool = True) -> Asy
             yield {**base, "decision": "error", "error": f"{type(exc).__name__}: {exc}"}
             continue
 
-        events: list[dict] = []
-        case = await process_notice(store, notice, event_sink=events.append)
+        case, decision, reason, events = await work_notice(store, notice, **agent_kwargs)
         for event in events:
             yield {**event, "link": item.link}
-
-        tally["processed"] += 1
-        if case.status == CaseStatus.DISMISSED:
+        if decision == "dismissed":
             tally["dismissed"] += 1
-        elif case.status == CaseStatus.NEEDS_HUMAN:
-            tally["needs_human"] += 1
-        elif case.status == CaseStatus.AWAITING_APPROVAL:
-            tally["awaiting_approval"] += 1
+            yield {**base, "decision": "dismissed", "case_id": case.id, "reason": reason}
+            continue
+
+        _count_outcome(tally, case)
+        if case.status == CaseStatus.AWAITING_APPROVAL:
             yield {"type": "ping", "case_id": case.id, "text": ping_text(case, store)}
         yield {**base, "decision": "processed", "case_id": case.id, "status": case.status.value}
+
+    # ----------------------------------------------------------------- openFDA sweep
+    if openfda:
+        records: dict[str, dict] = {}
+        if snapshot:
+            directory = Path(settings.fixtures_dir) / SNAPSHOT_OPENFDA
+            for record in openfda_snapshot_records():
+                records.setdefault((record.get("recall_number") or "").strip(), record)
+            yield {
+                "type": "feed", "source": "openfda", "origin": "snapshot",
+                "url": str(directory), "items": len(records),
+            }
+        if live:
+            try:
+                found = intake.openfda_lookup(since_days=120, limit=100)
+            except Exception as exc:  # pragma: no cover - openfda_lookup already swallows HTTP errors
+                found = []
+                yield {
+                    "type": "feed", "source": "openfda", "origin": "live",
+                    "url": intake.OPENFDA_URL, "items": 0, "error": f"{type(exc).__name__}: {exc}",
+                }
+            else:
+                added = 0
+                for enr in found:
+                    record = enrichment_to_record(enr)
+                    number = record["recall_number"]
+                    if number and number not in records:
+                        records[number] = record
+                        added += 1
+                yield {
+                    "type": "feed", "source": "openfda", "origin": "live",
+                    "url": intake.OPENFDA_URL, "items": added,
+                }
+
+        sweep = [r for r in records.values() if (r.get("status") or "Ongoing").strip().lower() == "ongoing"]
+        tally["openfda_seen"] = len(sweep)
+        total = len(sweep)
+
+        for index, record in enumerate(sweep, start=1):
+            notice, enrichment = notice_from_openfda(record, store.now())
+            base = {
+                "type": "item", "index": index, "total": total, "source": "openfda",
+                "title": notice.title, "link": notice.source_url,
+                "recall_number": notice.recall_number,
+            }
+
+            if not notice.is_food:
+                tally["skipped_non_food"] += 1
+                yield {**base, "decision": "skipped_non_food", "reason": record.get("product_type", "")}
+                continue
+
+            # Rule 1: an enforcement record for a case we already have enriches it, never re-pings it.
+            existing = find_same_recall_case(store, notice)
+            if existing is not None:
+                attach_enrichment(store, existing, enrichment)
+                tally["enriched"] += 1
+                yield {
+                    **base, "decision": "enriched", "case_id": existing.id,
+                    "status": existing.status.value,
+                }
+                continue
+
+            # A weekly sweep is bulk: a record that never reached our state does not earn a case row.
+            out_of_area, reason = rules.distribution_gate(
+                notice, settings.food_bank_state, store.ledger_brands()
+            )
+            if out_of_area:
+                tally["skipped_out_of_area"] += 1
+                yield {**base, "decision": "skipped_out_of_area", "reason": reason}
+                continue
+
+            case, decision, reason, events = await work_notice(store, notice, **agent_kwargs)
+            attach_enrichment(store, case, enrichment)
+            for event in events:
+                yield {**event, "link": notice.source_url}
+            if decision == "dismissed":
+                tally["dismissed"] += 1
+                yield {**base, "decision": "dismissed", "case_id": case.id, "reason": reason}
+                continue
+
+            _count_outcome(tally, case)
+            case = store.get_case(case.id) or case
+            if case.status == CaseStatus.AWAITING_APPROVAL:
+                yield {"type": "ping", "case_id": case.id, "text": ping_text(case, store)}
+            yield {**base, "decision": "processed", "case_id": case.id, "status": case.status.value}
 
     yield {"type": "done", "tally": tally}
 
@@ -811,6 +1173,7 @@ def outstanding_agencies(store: Store, case: RecallCase) -> list[str]:
 
 __all__ = [
     "approve",
+    "attach_enrichment",
     "build_call_script",
     "close_case",
     "dismiss",
@@ -819,8 +1182,11 @@ __all__ = [
     "intake_text",
     "intake_url",
     "next_case_id",
+    "notice_from_openfda",
     "notice_from_raw",
+    "openfda_snapshot_records",
     "outstanding_agencies",
+    "find_same_recall_case",
     "parse_rss_file",
     "ping_text",
     "process_notice",
@@ -828,4 +1194,6 @@ __all__ = [
     "resolve_needs_human",
     "run_followups",
     "scan",
+    "split_product_description",
+    "work_notice",
 ]

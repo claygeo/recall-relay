@@ -38,7 +38,7 @@ def create_app(store: Optional[Store] = None, *, db_path: Optional[Path | str] =
     application.include_router(pages.router)  # last: its "/" and "/cases/{id}" are the catch-alls
 
     @application.exception_handler(404)
-    async def _not_found(request: Request, exc) -> HTMLResponse | JSONResponse:  # noqa: ARG001
+    async def _not_found(request: Request, exc) -> HTMLResponse | JSONResponse:
         if request.url.path.startswith("/api/"):
             return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
         return render(

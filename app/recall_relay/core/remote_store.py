@@ -23,8 +23,8 @@ from .models import (
     CaseStatus,
     Decision,
     Distribution,
-    Receipt,
     RecallCase,
+    Receipt,
     ResponseStatus,
 )
 
@@ -87,10 +87,10 @@ class RemoteStore:
     def close(self) -> None:
         self._client.close()
 
-    def __enter__(self) -> "RemoteStore":
+    def __enter__(self) -> RemoteStore:
         return self
 
-    def __exit__(self, *exc: Any) -> None:
+    def __exit__(self, *exc: object) -> None:
         self.close()
 
     # ---------------------------------------------------------------- ledger

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from typing import Any, Optional
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
@@ -24,7 +25,6 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
-from xml.sax.saxutils import escape
 
 HAIR = colors.Color(0.6, 0.6, 0.6)
 RULE = colors.black

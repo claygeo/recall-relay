@@ -57,7 +57,7 @@ class ScanJob:
     async def wait(self, timeout: float = 15.0) -> None:
         try:
             await asyncio.wait_for(self._bell.wait(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return
         self._bell.clear()
 
@@ -344,7 +344,7 @@ async def demo_reset(request: Request) -> Response:
     store.reset_demo()
     seeded: dict[str, int] = {}
     try:
-        from ...core import seed as seed_module  # noqa: PLC0415 - optional at runtime
+        from ...core import seed as seed_module
 
         loader = getattr(seed_module, "load_seed", None)
         if callable(loader):
@@ -444,7 +444,7 @@ def jsonable(value: Any) -> Any:
 
 @router.post("/api/data/rpc")
 async def data_rpc(request: Request) -> JSONResponse:
-    from ..security import data_secret  # noqa: PLC0415 - read at call time so a test can set the env
+    from ..security import data_secret
 
     secret = data_secret()
     presented = request.headers.get("x-relay-secret", "")

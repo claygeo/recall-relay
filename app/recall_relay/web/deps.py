@@ -109,7 +109,7 @@ def not_found(request: Request, what: str, *, back: str = "/cases") -> HTMLRespo
 def service_module() -> Any:
     """Import the agent façade lazily: the read-only surfaces must render even if the agent layer is
     mid-edit or its dependencies are not installed."""
-    from ..agents import service  # noqa: PLC0415 - deliberate late import
+    from ..agents import service
 
     return service
 

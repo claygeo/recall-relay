@@ -15,7 +15,6 @@ from ..core.models import (
     Agency,
     CaseStatus,
     RecallCase,
-    ResponseStatus,
 )
 from ..core.store import Store
 

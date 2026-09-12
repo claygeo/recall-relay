@@ -28,7 +28,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     import uvicorn  # imported here so --help works without the server installed
-
     from recall_relay.core.config import settings
 
     print(f"Recall Relay · db {settings.db_path}")
