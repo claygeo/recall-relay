@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "recall-relay",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "recall_relay.web.app:app", "--port", "8000", "--app-dir", "app"],
+      "port": 8000
+    }
+  ]
+}

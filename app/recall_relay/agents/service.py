@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import inspect
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Literal, Optional
@@ -97,24 +97,21 @@ def _press_fixture_index() -> dict[str, str]:
 
 
 def parse_rss_file(path: Path | str) -> list[intake.RssItem]:
-    """Parse a pinned RSS snapshot into the same shape `intake.poll_fda_rss` returns."""
-    import feedparser  # local import: only the scan path needs it
+    """Parse a pinned RSS snapshot with the same parser the live feed uses."""
+    return intake.parse_rss(Path(path).read_text(encoding="utf-8", errors="ignore"))
 
-    parsed = feedparser.parse(str(path))
-    items: list[intake.RssItem] = []
-    for entry in parsed.entries:
-        published = datetime.now(timezone.utc)
-        struct = getattr(entry, "published_parsed", None)
-        if struct:
-            published = datetime(*struct[:6], tzinfo=timezone.utc)
-        items.append(
-            intake.RssItem(
-                title=(getattr(entry, "title", "") or "").strip(),
-                link=(getattr(entry, "link", "") or "").strip(),
-                published=published,
-            )
-        )
-    return items
+
+# FDA press pages are hand-tagged and the tag is sometimes wrong: the 2026-09-03 American Regent
+# epinephrine-injection recall is filed under "Product Type: Food & Beverages". `rules.looks_like_food`
+# trusts Product Type when it names food, so a mis-tagged drug recall would open a case and cost a model
+# call. This is the narrow override: only words that cannot appear in a real food recall title. Ambiguous
+# hints ("capsule", "tablet", "device", "cosmetic") are deliberately NOT here -- dietary supplements are
+# FDA-regulated food and silently dropping a real food recall is the expensive failure (rule 5).
+UNAMBIGUOUS_NON_FOOD = re.compile(
+    r"\b(drug|drugs|injection|injectable|medical device|firmware|vape|tobacco|"
+    r"pet food|dog food|cat food|supplements? for dogs|feline|canine)\b",
+    re.I,
+)
 
 
 def next_case_id(store: Store, *, drill: bool = False) -> str:
@@ -222,11 +219,20 @@ async def scan(store: Store, *, live: bool = True, snapshot: bool = True) -> Asy
                 continue
 
             raw = intake.parse_fda_press_page(html, item.link)
-            if not rules.looks_like_food(item.title, getattr(raw, "product_type", "")) or not getattr(
-                raw, "is_food", True
+            product_type = getattr(raw, "product_type", "")
+            mis_tagged = bool(UNAMBIGUOUS_NON_FOOD.search(item.title or ""))
+            if (
+                not rules.looks_like_food(item.title, product_type)
+                or not getattr(raw, "is_food", True)
+                or mis_tagged
             ):
                 tally["skipped_non_food"] += 1
-                yield {**base, "decision": "skipped_non_food"}
+                reason = (
+                    f"FDA tagged this {product_type!r} but the title is a drug/device recall"
+                    if mis_tagged and rules.looks_like_food(item.title, product_type)
+                    else f"product type {product_type!r}"
+                )
+                yield {**base, "decision": "skipped_non_food", "reason": reason}
                 continue
 
             notice = notice_from_raw(raw, Source.FDA_RSS, item.published)
