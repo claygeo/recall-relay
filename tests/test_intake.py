@@ -656,7 +656,7 @@ def test_raw_excerpt_is_capped_at_1500_chars():
 
 def test_every_fixture_press_page_parses_without_raising():
     pages = sorted(PRESS.glob("*.html"))
-    assert len(pages) == 6, "six press fixtures were cached on 2026-09-11"
+    assert len(pages) >= 6, "at least the six press fixtures cached on 2026-09-11 (plus the pinned feed's pages)"
     for page in pages:
         raw = parse_fda_press_page(page.read_text(encoding="utf-8"), url=f"https://www.fda.gov/{page.stem}")
         assert raw.title and raw.firm and raw.body_text

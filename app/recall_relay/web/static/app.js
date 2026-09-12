@@ -60,7 +60,7 @@
   });
 
   /* ------------------------------------------------------- the scan run */
-  var TALLY_KEYS = ["seen", "skipped_non_food", "already_seen", "dismissed", "needs_human", "awaiting_approval"];
+  var TALLY_KEYS = ["seen", "skipped_non_food", "already_seen", "dismissed", "needs_human", "awaiting_approval", "blocked"];
 
   function setTally(tally) {
     TALLY_KEYS.forEach(function (key) {
@@ -126,6 +126,7 @@
         if (event.decision === "already_seen") tally.already_seen += 1;
         if (event.decision === "skipped_non_food") tally.skipped_non_food += 1;
         if (event.decision === "dismissed") tally.dismissed += 1;
+        if (event.decision === "blocked") tally.blocked = (tally.blocked || 0) + 1;
         if (event.decision === "error") tally.errors += 1;
         if (event.status === "needs_human") tally.needs_human += 1;
         if (event.status === "awaiting_approval") tally.awaiting_approval += 1;

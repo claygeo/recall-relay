@@ -468,6 +468,7 @@ async def scan(
         "needs_human": 0,
         "awaiting_approval": 0,
         "errors": 0,
+        "blocked": 0,
         "openfda_seen": 0,
     }
 
@@ -488,8 +489,12 @@ async def scan(
             html, origin, blocked = _fetch_press(item.link, store=store)
             yield {"type": "fetch", "link": item.link, "origin": origin, "blocked": blocked}
             if blocked or not html:
-                tally["errors"] += 1
-                yield {**base, "decision": "error", "error": "fetch blocked or empty"}
+                # fda.gov walls datacenter egress. Not an error in the procedure: the item is recorded as
+                # blocked, the coordinator can paste the notice text, and the pinned feed's pages ship as
+                # committed fixtures so the demo never depends on this fetch.
+                tally["blocked"] = tally.get("blocked", 0) + 1
+                yield {**base, "decision": "blocked",
+                       "error": "fda.gov refused this host (abuse wall); paste the notice text on the Run tab"}
                 continue
 
             raw = intake.parse_fda_press_page(html, item.link)
