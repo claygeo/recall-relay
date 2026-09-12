@@ -160,6 +160,12 @@ def stub_service(monkeypatch):
         store.save_case(case)
         return case
 
+    class FetchBlocked(RuntimeError):
+        """Mirrors recall_relay.agents.service.FetchBlocked. The intake route catches it off the module,
+        so the stub has to carry it or the stub is not a stand-in for the façade."""
+
+    module.FetchBlocked = FetchBlocked
+
     async def intake_url(store, url, **kwargs):
         raise RuntimeError(f"stub intake refuses {url}")
 
@@ -320,6 +326,57 @@ def test_ledger_lists_agencies_and_the_distribution_log(client, web_store):
 # ---------------------------------------------------------------------------
 # cases and the case page
 # ---------------------------------------------------------------------------
+def test_the_ledger_offers_the_release_control_only_on_a_held_row(client, web_store):
+    assert 'data-post="/api/holds/' not in client.get("/ledger").text
+
+    build_closed_case(web_store)
+    body = client.get("/ledger").text
+    assert f'data-post="/api/holds/{HERO_RECEIPT_ID}/release"' in body
+    assert body.count('data-post="/api/holds/') == len(web_store.holds()) == 1
+    # the confirm says what has to be true before a coordinator clicks it
+    assert "Only do this after the disposition" in body
+
+
+def test_releasing_a_hold_clears_the_tag_and_lands_in_the_audit_trail(client, web_store):
+    """Rule 11 calls the HOLD tag reversible. This is the control that makes that true."""
+    case = build_closed_case(web_store)
+    assert web_store.holds().get(HERO_RECEIPT_ID) == case.id
+
+    response = client.post(f"/api/holds/{HERO_RECEIPT_ID}/release", headers={"Accept": "application/json"})
+    assert response.status_code == 200
+    assert response.json()["redirect"] == "/ledger"
+
+    assert HERO_RECEIPT_ID not in web_store.holds()
+    released = [e for e in web_store.events(case.id) if e.kind == "hold_released"]
+    assert len(released) == 1
+    assert released[0].actor == "coordinator"
+    assert f"receipt {HERO_RECEIPT_ID}" in released[0].detail
+    assert 'data-post="/api/holds/' not in client.get("/ledger").text
+
+
+def test_releasing_one_hold_leaves_every_other_hold_alone(client, web_store):
+    """Planted defect check: a release that swept the case (or the table) would clear receipt B too."""
+    case = build_closed_case(web_store)
+    other = next(r.id for r in web_store.list_receipts() if r.id != HERO_RECEIPT_ID)
+    web_store.set_hold(other, case.id, True)
+    assert set(web_store.holds()) == {HERO_RECEIPT_ID, other}
+
+    response = client.post(f"/api/holds/{HERO_RECEIPT_ID}/release", headers={"Accept": "application/json"})
+    assert response.status_code == 200
+    assert web_store.holds() == {other: case.id}
+
+
+def test_releasing_a_receipt_with_no_hold_is_a_sheet_not_a_stack_trace(client, web_store):
+    case = build_closed_case(web_store)
+    free = next(r.id for r in web_store.list_receipts() if r.id != HERO_RECEIPT_ID)
+
+    response = client.post(f"/api/holds/{free}/release")
+    assert response.status_code == 404
+    assert f"There is no HOLD on receipt {free}" in response.text
+    # and the real hold is untouched
+    assert web_store.holds() == {HERO_RECEIPT_ID: case.id}
+
+
 def test_cases_and_case_page_render(client, web_store):
     case = build_closed_case(web_store)
     listing = client.get("/cases")
@@ -620,6 +677,31 @@ def test_intake_without_a_source_is_a_readable_refusal(client):
     response = client.post("/api/intake", data={"url": "", "text": ""})
     assert response.status_code == 400
     assert "Nothing to read" in response.text
+
+
+def test_a_walled_url_gets_the_paste_the_text_sheet(client, stub_service, monkeypatch):
+    """fda.gov refusing the host is the one intake failure a coordinator can act on, so it gets its own
+    sheet naming the door that still works."""
+    async def blocked(store, url, **kwargs):
+        raise stub_service.FetchBlocked(f"fda.gov refused this host (origin=network, abuse wall): {url}")
+
+    monkeypatch.setattr(stub_service, "intake_url", blocked)
+
+    response = client.post("/api/intake", data={"url": "https://www.fda.gov/safety/recalls/walled"})
+    assert response.status_code == 400
+    assert "Intake blocked" in response.text
+    assert "refused this host" in response.text
+    assert "Paste the notice text" in response.text
+    assert "21 cached demo pages" in response.text
+    assert "That notice could not be read" not in response.text
+
+
+def test_every_other_intake_failure_still_gets_the_generic_sheet(client):
+    """Guards the ordering: the specific handler must not have swallowed the general one."""
+    response = client.post("/api/intake", data={"url": "https://www.fda.gov/safety/recalls/anything"})
+    assert response.status_code == 400
+    assert "That notice could not be read" in response.text
+    assert "refused this host" not in response.text
 
 
 # ---------------------------------------------------------------------------

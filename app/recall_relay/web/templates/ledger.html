@@ -48,6 +48,7 @@
             {{ r.product }}
             {% if row.hold_case_id %}
             <a class="tag tag--hold" href="/cases/{{ row.hold_case_id }}" title="Held for {{ row.hold_case_id }}">Hold</a>
+            <button class="link-btn link-btn--tag" data-post="/api/holds/{{ r.id }}/release" data-confirm="Release the HOLD on receipt {{ r.id }}? Only do this after the disposition (return, destroy, or pickup) is recorded.">release</button>
             {% endif %}
           </td>
           <td class="dim">{{ r.size or "—" }}</td>

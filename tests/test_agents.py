@@ -1071,3 +1071,31 @@ def test_openfda_notice_anchors_the_window_on_the_report_date_not_the_initiation
 
     candidates = rules.score_candidates(seeded_store.list_receipts(), notice)
     assert [c.receipt_id for c in candidates] == [34]
+
+
+# ---------------------------------------------------------------------------
+# the pasted-URL door: a walled host is its own failure, not a generic one
+# ---------------------------------------------------------------------------
+async def test_a_walled_fetch_raises_fetch_blocked_with_the_door_that_still_works(store, monkeypatch):
+    """fda.gov's abuse wall refuses whole hosts. The coordinator can still paste the text, so the error
+    has to be the kind a caller can route on, not a status code in a string."""
+    monkeypatch.setattr(service, "_fetch_press", lambda url, **kwargs: ("", "network", True))
+
+    with pytest.raises(service.FetchBlocked) as caught:
+        await service.intake_url(store, "https://www.fda.gov/safety/recalls/walled")
+
+    message = str(caught.value)
+    assert "refused this host" in message
+    assert "Paste the notice text" in message
+    assert issubclass(service.FetchBlocked, RuntimeError)
+
+
+async def test_an_empty_page_that_was_not_blocked_is_a_plain_runtime_error(store, monkeypatch):
+    """Only the abuse wall gets the special type; every other empty page is the generic failure."""
+    monkeypatch.setattr(service, "_fetch_press", lambda url, **kwargs: ("", "fixture", False))
+
+    with pytest.raises(RuntimeError) as caught:
+        await service.intake_url(store, "https://www.fda.gov/safety/recalls/empty")
+
+    assert not isinstance(caught.value, service.FetchBlocked)
+    assert "came back empty" in str(caught.value)

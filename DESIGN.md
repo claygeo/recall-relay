@@ -43,7 +43,7 @@
 - **Approach:** a binder with tabs. A slim top bar (wordmark left in serif, tab-block nav: Ledger · Run · Cases · Packet · Inbox), then one column of sheets. No sidebar.
 - **Sheets:** a sheet is a near-white rectangle with a 1px rule border and 2px radius, 24px padding. Sheets carry an eyebrow (mono) and a serif title. Content sits on the sheet like it was typed there.
 - **Ledger view:** one wide sheet, dense table, sticky header, HOLD tags inline in the row, receipt id as the accession number in mono in the first column.
-- **Run view:** a two-column sheet on desktop: left, the tally as large mono numbers with serif captions (scanned · skipped · dismissed · needs human · pinged); right, the live log as a mono list with a vermilion live dot while streaming. The tool calls stream in as they happen.
+- **Run view:** a two-column sheet on desktop: left, the tally as large mono numbers with serif captions (scanned · skipped non-food · already seen · dismissed · needs human · pinged · blocked · errors); right, the live log as a mono list with a vermilion live dot while streaming. The tool calls stream in as they happen, and the last finished run replays on load.
 - **Case view:** the decision card is one sheet at 38px headline (the product), the verbatim ping paragraph in serif, then the pull list table, then the agency grid (agency · cases · shipped · status · last response · next follow-up), then the drafted notices as paper previews. The approve control is the only vermilion button on the page.
 - **Inbox mirror:** the agency's view, styled as an email client would render plain text: subject line in serif, body in serif, the four one-click response links as underlined text, not buttons.
 - **Packet:** a print-first page: title block, sources, matched rows, pull list, every send/response/follow-up in a mono timeline, approvals, elapsed time. `@media print` hides the top bar.
@@ -59,7 +59,7 @@
 - **Tables:** hairline rows, header in mono eyebrow style, first column mono id, numbers right-aligned tabular. Zebra striping never; hairlines do the work.
 - **Buttons:** primary = ink fill, cream text, 2px radius, Plex Sans 500. Approve = vermilion fill, cream text. Secondary = transparent, 1px ink border. Ghost = underlined text link.
 - **Eyebrow + title:** every sheet starts with `EYEBROW` (mono) over a serif title. Counts are typographic: "Receipts 60", "Agencies 12".
-- **The decision ping:** a sheet with a vermilion 4px left rule, the verbatim ping text in 19px serif, Approve / Edit / Dismiss beneath. This is the one place vermilion is allowed to be a rule rather than a tag.
+- **The decision ping:** a sheet with a vermilion 4px left rule, the verbatim ping text in 19px serif, "Approve and send" and "Dismiss" (with a reason field) beneath. This is the one place vermilion is allowed to be a rule rather than a tag.
 - **Printed artifacts:** notices and signs render inside a sheet at document proportions (max 680px wide), serif body, mono header block (recall number, class, product, lots), a hairline between header and body. Shelf signs in three languages are three sheets side by side on desktop.
 - **Empty states:** one serif sentence, no illustration.
 

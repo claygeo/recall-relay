@@ -4,7 +4,8 @@ These are the rules a food-safety coordinator actually runs. Each one is a code 
 so a judge (or an auditor) can read what the agent is not allowed to do. Rule numbers match the README.
 
 Rule 1  Intake precedence: earliest source creates the case; openFDA only enriches.
-Rule 2  Class-driven handling (21 CFR 7.3(m)); unclassified press releases are handled as Class I.
+Rule 2  Class-driven handling (21 CFR 7.3(m)); Class III and market withdrawals get the weekly
+        cadence and no client notice; unclassified press releases are handled as Class I.
 Rule 3  Match hierarchy: brand + product line + size, then receipt-date window, then lot to NARROW only.
 Rule 4  Missing lot widens, never drops.
 Rule 5  NEEDS_HUMAN is the default for ambiguity.
@@ -79,11 +80,6 @@ def followup_cadence(classification: Classification) -> tuple[int, int | None]:
 def client_notice_required(classification: Classification, any_already_distributed: bool) -> bool:
     """Rule 15."""
     return classification == Classification.CLASS_I or any_already_distributed
-
-
-def agencies_notified_immediately(classification: Classification) -> bool:
-    """Rule 2: Class III and market withdrawals go to the weekly digest, not an immediate notice."""
-    return classification in (Classification.CLASS_I, Classification.CLASS_II)
 
 
 # ---------------------------------------------------------------------------

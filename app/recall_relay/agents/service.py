@@ -59,6 +59,16 @@ from .orchestrator import (
     ping_text as _ping_text,
 )
 
+
+class FetchBlocked(RuntimeError):
+    """fda.gov's abuse wall refused this host, so there is no page to read.
+
+    A distinct type because the answer is different from every other fetch failure: the coordinator has
+    a working door (paste the notice text), and the caller should say so instead of printing a status
+    code at someone who cannot act on it.
+    """
+
+
 SNAPSHOT_RSS = "rss/recalls-2026-09-11.xml"  # relative to settings.fixtures_dir
 SNAPSHOT_OPENFDA = "openfda"  # every pinned enforcement payload in this directory
 OPENFDA_RECORD_URL = intake.OPENFDA_URL + '?search=recall_number:"{recall_number}"'
@@ -732,8 +742,13 @@ async def process_notice(
 async def intake_url(store: Store, url: str, *, event_sink: EventSink = None) -> RecallCase:
     """A coordinator pasted a link."""
     html, origin, blocked = _fetch_press(url, store=store)
-    if blocked or not html:
-        raise RuntimeError(f"could not fetch {url} (origin={origin}, blocked={blocked})")
+    if blocked:
+        raise FetchBlocked(
+            f"fda.gov refused this host (origin={origin}, abuse wall). Paste the notice text instead; "
+            f"the cached demo pages still open by URL."
+        )
+    if not html:
+        raise RuntimeError(f"could not fetch {url} (origin={origin}): the page came back empty")
     raw = intake.parse_fda_press_page(html, url)
     notice = notice_from_raw(raw, Source.PASTED_URL, store.now())
     return await process_notice(store, notice, event_sink=event_sink)
@@ -1178,6 +1193,7 @@ def outstanding_agencies(store: Store, case: RecallCase) -> list[str]:
 
 
 __all__ = [
+    "FetchBlocked",
     "approve",
     "attach_enrichment",
     "build_call_script",

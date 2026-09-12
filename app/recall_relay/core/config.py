@@ -40,10 +40,10 @@ class Settings:
     # web
     public_base_url: str = field(default_factory=lambda: _env("PUBLIC_BASE_URL", "http://127.0.0.1:8000"))
     secret_key: str = field(default_factory=lambda: _env("SECRET_KEY", "dev-only-change-me"))
-    judge_password: str = field(default_factory=lambda: _env("JUDGE_PASSWORD", ""))
-    # agent backend for the dashboard: inprocess | agentcore
-    agent_backend: str = field(default_factory=lambda: _env("AGENT_BACKEND", "inprocess"))
-    agentcore_runtime_arn: str = field(default_factory=lambda: _env("AGENTCORE_RUNTIME_ARN"))
+    # where the agent layer keeps its rows: inprocess = a local SQLite Store, remote = the dashboard's
+    # allow-listed /api/data/rpc (see core.remote_store). A transport switch, never a storage switch.
+    agent_backend: str = field(default_factory=lambda: _env("AGENT_BACKEND", "inprocess"))  # inprocess|remote
+    agent_data_url: str = field(default_factory=lambda: _env("AGENT_DATA_URL"))
     data_secret: str = field(default_factory=lambda: _env("AGENT_DATA_SECRET"))
     max_agent_runs_per_day: int = field(default_factory=lambda: int(_env("MAX_AGENT_RUNS_PER_DAY", "60") or 60))
     cache_dir: Path = field(default_factory=lambda: Path(_env("RECALL_RELAY_CACHE", str(ROOT / "data" / "runtime" / "cache"))))

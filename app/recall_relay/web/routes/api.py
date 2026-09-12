@@ -1,5 +1,6 @@
-"""The controls: the scan and its SSE stream, manual intake, the one approval, follow-ups, the demo clock,
-the reset, health, and the allow-listed data RPC the deployed AgentCore Runtime calls back into.
+"""The controls: the scan and its SSE stream, manual intake, the one approval, the HOLD release,
+follow-ups, the demo clock, the reset, health, and the allow-listed data RPC the deployed AgentCore
+Runtime calls back into.
 
 Every route here changes state or spends money, so every one of them is rate limited, audited, or both.
 """
@@ -187,6 +188,19 @@ async def intake(
                 message="Paste a URL, paste the notice text, or upload a PDF. One source per submission.",
                 links=[{"href": "/run", "label": "Back to the run page"}],
             )
+    except service.FetchBlocked:
+        # the specific failure a coordinator can actually act on: there is another door
+        return render(
+            request,
+            "message.html",
+            status_code=400,
+            tab="run",
+            eyebrow="Intake blocked",
+            headline="fda.gov refused this host",
+            message="This host's requests to fda.gov are walled. Paste the notice text (or a forwarded "
+                    "alert) into the text box instead. The 21 cached demo pages still open by URL.",
+            links=[{"href": "/run", "label": "Back to the run page"}],
+        )
     except Exception as exc:
         return render(
             request,
@@ -299,6 +313,29 @@ async def close(request: Request, case_id: str) -> Response:
     except Exception as exc:
         return _control_error(request, exc, case_id=case_id)
     return redirect(request, f"/cases/{case_id}/packet")
+
+
+# ---------------------------------------------------------------------------
+# releasing a HOLD tag (rule 11 / rule 12)
+# ---------------------------------------------------------------------------
+@router.post("/api/holds/{receipt_id}/release")
+async def release_hold(request: Request, receipt_id: str) -> Response:
+    """Take the HOLD tag off one receipt.
+
+    Rule 12 puts HOLD tags on without asking a human precisely because they are reversible, which only
+    holds if something reverses them. This is that control: one receipt at a time, never a sweep, and the
+    release lands in the case's audit trail like every other decision. What happened to the product
+    (returned, destroyed, picked up) is recorded as the agency's response, not invented here.
+    """
+    store: Store = get_store(request)
+    parsed = parse_int(receipt_id)
+    case_id = store.holds().get(parsed, "") if parsed is not None else ""
+    if not case_id:
+        return not_found(request, f"There is no HOLD on receipt {receipt_id}.", back="/ledger")
+
+    store.set_hold(parsed, case_id, False)
+    maybe_store_audit(store, case_id, "coordinator", "hold_released", f"receipt {parsed}")
+    return redirect(request, "/ledger", message=f"HOLD released on receipt {parsed}")
 
 
 # ---------------------------------------------------------------------------

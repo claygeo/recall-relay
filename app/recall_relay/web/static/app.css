@@ -306,6 +306,16 @@ table.ledger tr.held td { background: rgba(200, 71, 27, 0.035); }
 }
 .link-btn:hover { color: var(--accent); }
 
+/* the ghost release control under a HOLD tag: mono 11px, quieter than the tag it undoes. Block, so it
+   left-aligns with the tag instead of hanging off it when the product cell wraps (it always does). */
+.link-btn--tag {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  margin-top: 2px;
+}
+
 .btn-row { display: flex; gap: var(--s3); flex-wrap: wrap; align-items: center; }
 
 /* ---------------------------------------------------------------- forms */

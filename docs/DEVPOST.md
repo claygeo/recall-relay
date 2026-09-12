@@ -40,8 +40,8 @@ Fifteen domain rules are encoded as code paths, not prompt lines, from "a lot co
 ## Accomplishments
 
 - A complete loop, not a chat box: intake, match, pull list, one approval, relay, chase, audit.
-- Every judgment call is typed, every send is gated by a hook, every action is on the record.
-- Tests with planted defects in every module; the seed builder ran 18 mutations against the rules and store and every one turned the suite red.
+- Every judgment call is typed, the agent's send tool is gated by a hook, every action is on the record.
+- Planted-defect tests across the core modules; an 18-mutant pass during the build turned the suite red every time.
 
 ## What we learned
 

@@ -361,12 +361,7 @@ def test_followup_cadence_per_class():
     assert all(c in rules.FOLLOWUP_CADENCE_HOURS for c in Classification)
 
 
-def test_immediate_notice_and_client_notice_rules():
-    assert rules.agencies_notified_immediately(Classification.CLASS_I) is True
-    assert rules.agencies_notified_immediately(Classification.CLASS_II) is True
-    assert rules.agencies_notified_immediately(Classification.CLASS_III) is False
-    assert rules.agencies_notified_immediately(Classification.MARKET_WITHDRAWAL) is False
-
+def test_client_notice_rules():
     assert rules.client_notice_required(Classification.CLASS_I, False) is True
     assert rules.client_notice_required(Classification.CLASS_III, True) is True   # already on plates
     assert rules.client_notice_required(Classification.CLASS_III, False) is False

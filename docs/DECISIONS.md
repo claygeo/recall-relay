@@ -62,3 +62,15 @@ review. Recorded so the operator can audit them.
     instance warm. Durable state needs the Starter plan plus a persistent disk (~$7.25/mo): the operator's call.
 20. **The deployed model is Claude Sonnet via OpenRouter**, budget-capped at 4 agent runs per day until
     Bedrock quota is raised or the OpenRouter balance is topped up. Stated in the README.
+
+## 2026-09-12 (Sat, ~10:30 ET): documentation audit
+
+21. **Docs audited against the code by a fresh-context reviewer** (38 findings). Root cause: the README
+    was written from the build brief before the code landed. Closed by making claims true where the
+    change was small (AGENT_BACKEND now selects the Runtime's store transport, dead `prompt` mode and
+    dead config removed, a HOLD release control on the ledger, a specific "fda.gov refused this host"
+    error for blocked URL intake, the unused Class III digest helper deleted) and by rewording the rest
+    to exactly what the code does (rules 2, 10, 11, 12, 14, 15; SES and Resend are stubs; "one decision"
+    on the ambiguous path is one question plus one approval; the keep-alive cron is the only schedule;
+    the mutation pass ran in a scratch directory). Every route, rate limit, threshold, and env var is
+    now in the README. Standing rule: never claim in the README what a judge cannot find in the repo.
