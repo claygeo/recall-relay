@@ -57,4 +57,4 @@ The recalls are real. The food bank, its twelve agencies, and its ledger are see
 
 ## Testing instructions for judges
 
-See the README section "Try it". The live demo is public; expensive actions are rate-limited and behind a daily budget. `LIVE_DEMO_URL`.
+See the README section "Try it". The live demo is public; expensive actions are rate-limited and behind a daily budget. https://recall-relay.onrender.com (free instance; the first request after idle can take a minute).

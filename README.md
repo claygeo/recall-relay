@@ -6,7 +6,7 @@ Recall Relay is a Strands Agents application that runs a food bank's recall proc
 
 Built for the AWS **Agents for Humans** hackathon, Good Neighbor track, September 2026. Apache-2.0.
 
-- Live demo: `LIVE_DEMO_URL`
+- Live demo: https://recall-relay.onrender.com (free instance; the first request after idle can take a minute)
 - Video: `VIDEO_URL`
 - Architecture diagram: [docs/architecture.png](docs/architecture.png)
 
@@ -90,6 +90,7 @@ The live demo is public and read-only until you click something. The expensive a
 - **Runtime.** [`app/runtime_main.py`](app/runtime_main.py) wraps the same service functions in `BedrockAgentCoreApp` with a small payload contract (`scan`, `intake`, `approve`, `followups`, `status`, free-form `prompt`). It deploys with the AgentCore CLI using the CodeZip build (no container): `agentcore deploy` from the repo root; packaging is proven with `agentcore package`.
 - **Stateless by design.** The dashboard (FastAPI plus SQLite) is the system of record. The Runtime's data tools call it over an authenticated REST endpoint (`/api/data/rpc`), so `AGENT_BACKEND` is a transport switch, never a storage switch.
 - **Schedule-ready.** A daily EventBridge Scheduler target invoking the Runtime with `{"mode": "scan"}` is the intended production shape. The README claims a scheduled run only when one has been observed in CloudWatch. Deployment status: `AGENTCORE_STATUS`.
+- **Model note.** The live demo runs Claude Sonnet through an OpenAI-compatible endpoint because the hackathon AWS account was created on the final weekend and its Bedrock quota had not yet been raised from zero. The Bedrock path is the same `BedrockModel` code behind one environment variable.
 
 ## Data sources, and what was measured
 
@@ -138,7 +139,7 @@ agentcore invoke --prompt '{"mode": "status"}'
 .venv/Scripts/python.exe -m pytest -q
 ```
 
-`TEST_COUNT` tests, all offline against fixtures. Every module ships with planted-defect tests: a corrupted hero row, a mutated press page, a case without approval, a reset that must keep the ledger. A verifier that has never failed has never been tested, so the seed builder also ran 18 mutations against the rules and store and confirmed every one turned the suite red.
+188 tests, all offline against fixtures. Every module ships with planted-defect tests: a corrupted hero row, a mutated press page, a case without approval, a reset that must keep the ledger. A verifier that has never failed has never been tested, so the seed builder also ran 18 mutations against the rules and store and confirmed every one turned the suite red.
 
 ## Repository layout
 
