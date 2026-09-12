@@ -572,6 +572,7 @@ async def scan(
 
         sweep = [r for r in records.values() if (r.get("status") or "Ongoing").strip().lower() == "ongoing"]
         tally["openfda_seen"] = len(sweep)
+        tally["seen"] = tally.get("seen", 0) + len(sweep)  # the tally counts every record walked, both feeds
         total = len(sweep)
 
         for index, record in enumerate(sweep, start=1):
