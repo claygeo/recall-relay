@@ -3,11 +3,11 @@
 **Project name:** Recall Relay
 **Tagline:** Every recall, every pantry, with proof.
 **Track:** Good Neighbor Agents
-**Built with:** Strands Agents, Amazon Bedrock AgentCore Runtime, Amazon Bedrock (Claude), FastAPI, SQLite, Python 3.12
+**Built with:** Strands Agents 1.55, bedrock-agentcore (BedrockAgentCoreApp entrypoint, packaged with the AgentCore CLI CodeZip build), Claude Sonnet 4.6 (Bedrock path in code; the live demo reaches it through an OpenAI-compatible endpoint), FastAPI, SQLite, Python 3.12
 
 ## Inspiration
 
-When the FDA posts a food recall, Feeding America emails every member food bank. That part works. What happens next is one coordinator, a spreadsheet, and a network of volunteer pantries, some of which open once a month. The recall that this demo is built on is real: on September 2, 2026 a lot of Great Value frozen berries sold at Walmart in 27 states including Florida was recalled for E. coli. Walmart retail rescue is how a lot of frozen food reaches the pantries near me in South Dade. In the seeded ledger, a shipment of those berries went out to a pantry two days after the press release, because nobody cross-checked the ledger. Recall Relay exists so that never happens again, and so the household that already took the box home is not forgotten.
+When the FDA posts a food recall, Feeding America emails every member food bank. That part works. What happens next is one coordinator, a spreadsheet, and a network of volunteer pantries, some of which open once a month. The recall that this demo is built on is real: on September 2, 2026 a lot of Great Value frozen berries sold at Walmart in 27 states including Florida was recalled for E. coli. Walmart retail rescue is how a lot of frozen food reaches the pantries near me in South Dade. In the seeded ledger, a shipment of those berries went out to a pantry two days after the press release, because nobody cross-checked the ledger. Recall Relay exists so that never happens again, and so the shelf sign for the next family through the pantry door actually gets printed.
 
 ## What it does
 
@@ -26,14 +26,14 @@ Fifteen domain rules are encoded as code paths, not prompt lines, from "a lot co
 ## How we built it
 
 - **Strands Agents.** One orchestrator `Agent` whose `@tool` functions run the procedure; the Matcher and the Notice writer are agents-as-tools with Pydantic `structured_output_model` outputs; `stream_async` feeds the live run log. Hooks enforce the invariants: an `AuditHook` writes a row for every tool call, and an `ApprovalGuard` cancels the send tool on `BeforeToolCallEvent` unless the case carries an approval timestamp. A prompt can be talked out of a rule; a hook cannot.
-- **Amazon Bedrock AgentCore Runtime**, CodeZip build, no container. The runtime is stateless; the dashboard owns the SQLite register and the runtime calls it over an authenticated API, so identical agent code runs locally and deployed.
+- **Packaged for Amazon Bedrock AgentCore Runtime**, CodeZip build, no container: the entrypoint, config, and package are in the repo and validated with the AgentCore CLI; the Runtime was not launched before the deadline because the hackathon AWS account was created on the final weekend. The runtime is stateless by design; the dashboard owns the SQLite register and the runtime reaches it over an authenticated API, so the same agent code runs locally, on the web host, and in the package.
 - **Deterministic intake with no model in the loop:** the FDA press pages are parsed for products, UPCs as printed, lots, best-by dates, states, and the disposition sentence. An extractor agent runs only when that parse leaves a gap.
 - **A dashboard made of paper.** The product's output is notices, shelf signs, and an audit packet, so the interface is cream paper, ink, hairlines, and one rationed accent for the decision.
 
 ## Challenges we ran into
 
 - openFDA is a ledger, not a feed: we measured a median 33-day lag from recall initiation to the public record, and the demo recall returned zero rows nine days after its press release. The press feed leads; openFDA enriches.
-- fda.gov redirects non-browser clients to an apology page with a 200. The fetch tool detects the wall, caches pages, and routes blocked pages to a human.
+- fda.gov redirects non-browser clients, and every request from a datacenter host, to an apology page. The fetch tool detects the wall and never parses the apology; the pinned feed's pages ship as fixtures, and a blocked live item is counted as blocked so the coordinator can paste the notice.
 - UPCs in recall notices are printed six different ways. UPC is evidence, never a join key.
 - Real ledgers rarely have lot codes on retail-rescue rows. Missing lot widens the match; it never drops it.
 

@@ -16,7 +16,7 @@ flowchart LR
     T1["score_candidates<br/>rules 3/4/7/8, rapidfuzz, top-k only"]
     M["Matcher agent-as-tool<br/>structured_output: MatchVerdict<br/>MATCH / NO_MATCH / NEEDS_HUMAN"]
     W["Notice writer agent-as-tool<br/>structured_output: AgencyNotice, ClientSign<br/>(disposition copied verbatim)"]
-    H["Hooks<br/>AuditHook: audit row per tool call<br/>ApprovalGuard: cancel send_notices<br/>unless approved_at"]
+    H["Hooks<br/>AuditHook: audit row per tool call<br/>ApprovalGuard: cancel send_notices<br/>unless approved_at<br/>TerminalToolGuard: end the run<br/>after the decision"]
   end
 
   subgraph Register["System of record (FastAPI + SQLite)"]
@@ -31,9 +31,9 @@ flowchart LR
     P["Households<br/>shelf sign EN / ES / HT"]
   end
 
-  subgraph AWS["AWS"]
-    R["Amazon Bedrock AgentCore Runtime<br/>CodeZip deploy, stateless<br/>calls the register over REST"]
-    B["Amazon Bedrock<br/>Claude via Strands BedrockModel"]
+  subgraph AWS["AWS (packaged; the demo host runs the same code)"]
+    R["Amazon Bedrock AgentCore Runtime<br/>CodeZip package, stateless<br/>calls the register over REST"]
+    B["Amazon Bedrock<br/>Claude via Strands BedrockModel<br/>(demo: same model via an OpenAI-compatible endpoint)"]
   end
 
   S1 --> I1

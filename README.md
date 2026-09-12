@@ -16,7 +16,7 @@ Built for the AWS **Agents for Humans** hackathon, Good Neighbor track, Septembe
 
 When the FDA posts a food recall, Feeding America's national office emails every member food bank. That part works. What happens next is one coordinator, a spreadsheet, and a network of 50 to 500 partner agencies: church pantries, soup kitchens, school pantries, shelters, most of them volunteer-run, some open once a month.
 
-Someone has to cross-check the notice against receiving records that rarely captured a lot code, figure out which agencies took cases and when, email each one, chase confirmations, and produce the record the food-safety audit and the annual mock-recall drill require. And nobody reaches the household that already took the box home.
+Someone has to cross-check the notice against receiving records that rarely captured a lot code, figure out which agencies took cases and when, email each one, chase confirmations, and produce the record a food-safety review and the annual mock-recall drill ask for. And the shelf sign for the next family through the pantry door never gets printed.
 
 The demo is built on a real recall. On September 2, 2026, Frutas y Hortalizas del Sur S.A. expanded a recall to one lot of Great Value Organic Triple Berry Blend, 10 oz, sold at Walmart stores in 27 states including Florida, for possible E. coli O145. Walmart retail rescue is how a lot of frozen food reaches South Dade pantries. In the seeded ledger, 30 cases arrived August 24 with no lot code on the receipt, and 22 of them shipped to three pantries between August 26 and September 4. That last shipment went out two days after the press release, because nobody had cross-checked the ledger. That is the whole problem in one row.
 
@@ -36,9 +36,11 @@ A regional or independent food bank's partner-agency network: one food-safety or
 
 ## The one decision
 
-This is the entire human workload for the demo recall, verbatim from the product:
+This is the entire human workload for the demo recall. It is the ping the product generated in a live run on 2026-09-12, copied without edits:
 
-> FDA press release 9/3: Great Value Organic Triple Berry Blend 10 oz, lot 6040 01-6, best by 2/9/2028, E. coli O145, shipped to Walmart stores in 27 states including Florida. Linked to openFDA H-1181-2026 (same firm, same lot family, Class I). Your ledger: 30 cases received 8/24 from Walmart retail rescue, no lot on the receipt, so all 30 are treated as affected. 8 on hand (HOLD tag applied). 22 shipped to 3 agencies 8/26 to 9/04; one of them distributes same-day. Pull list, 3 agency notices, and 3 shelf signs drafted. Send?
+> FDA press release 9/3: Great Value Organic Triple Berry Blend 10 oz, lot 6040 01-6, Possible E. Coli Contamination. Your ledger: receipt 17, 30 cases received 8/24. No lot on the receipt, so all 30 are treated as affected. 8 on hand (HOLD tag applied). 22 shipped to 3 agencies 8/26-9/4; one distributes same-day. Pull list, 3 agency notices, and 7 shelf signs drafted. Send?
+
+Seven signs because each affected pantry gets one per language it serves. The case shows "recall pending" until openFDA publishes a recall number for the expansion; the July recall from the same firm (H-1181-2026) is a separate case that surfaces the ambiguous blueberry receipt as `NEEDS_HUMAN`.
 
 ## The 15 encoded rules
 
@@ -66,8 +68,8 @@ The live demo is public and read-only until you click something. The expensive a
 
 1. Open the **Ledger** tab. Receipt 17 is the hero row: Great Value Organic Triple Berry Blend, 10 oz, no lot, 30 cases.
 2. Open **Run** and click **Run daily scan**. The scan merges a pinned feed snapshot from 2026-09-11 with the live FDA feed and the weekly openFDA ledger, so the hero recall reproduces on every run. Watch the tally and the tool calls stream. Expect one `AWAITING_APPROVAL` case (Triple Berry), one `NEEDS_HUMAN` case (an unbranded blueberry receipt against the same firm's July recall), and everything else dismissed with a reason.
-3. Open the Triple Berry case. Read the ping. Click **Approve**.
-4. Open **Inbox**. Three agency notices are there. Click "We pulled it" on one, "Already distributed to clients" on the same-day pantry; the shelf sign renders in three languages.
+3. Open the Triple Berry case. Read the ping. Click **Approve and send** and confirm the dialog (rule 12: this is the one decision).
+4. Open **Inbox**. Three agency notices are there. Click "We pulled it" on one and enter a count; click "Already distributed to clients" on the pantry marked same-day (Florida City Family Shelter); its inbox then holds the shelf sign in English, Spanish, and Haitian Creole.
 5. Back on the case, click **Advance demo clock +24h** and **Run follow-ups now**: the silent agency gets a reminder. Advance again: the coordinator gets an escalation with a call script.
 6. Click **Close case** and open the audit packet, or download the PDF.
 7. Paste any FDA recall URL into the intake box on the Run tab to run the whole thing on a recall of your choosing.
@@ -78,19 +80,20 @@ The live demo is public and read-only until you click something. The expensive a
 
 ### Strands Agents, by name
 
-- **Orchestrator `Agent`** with `@tool` functions that run the procedure: intake, `score_candidates` (the model never sees the raw ledger, only the top candidates), `adjudicate_candidates`, `build_pull_list`, `draft_notices`, `request_approval`, `dismiss_case`, `mark_needs_human`, `remember_decision`, `recall_decisions`, `send_notices`.
-- **Agents-as-tools.** The Matcher and the Notice writer are separate `Agent` instances wrapped as `@tool` functions, each with a narrow system prompt and a typed output.
-- **`structured_output_model`.** `MatchVerdict`, `AgencyNotice`, `ClientSign`, and the extractor's `ExtractedNotice` are Pydantic models. The ping is gated by a typed field, not by prose.
-- **Hooks.** `AuditHook` writes an audit row before and after every tool call (this is the trace the packet is built from). `ApprovalGuard` cancels `send_notices` on `BeforeToolCallEvent` unless the case carries `approved_at`. The human-approval rule is enforced in a hook a judge can read, not in a prompt.
-- **`stream_async`** feeds a server-sent-events endpoint; the Run tab renders tool calls and verdicts as they happen.
-- **Model provider switch.** One environment variable selects `BedrockModel`, `AnthropicModel`, or an OpenAI-compatible endpoint. Identical agent code runs locally, on the web host, and on AgentCore Runtime.
+- **Orchestrator `Agent`** ([`agents/orchestrator.py`](app/recall_relay/agents/orchestrator.py)) with eleven `@tool` functions that run the procedure, registered under these names: `load_case`, `score_candidates` (deterministic scoring over the ledger; the model never sees the raw ledger, only the top candidates), `adjudicate_candidates`, `build_pull_list`, `draft_notices`, `request_approval`, `dismiss_case`, `mark_needs_human`, `remember_decision`, `recall_decisions`, `send_notices`. Tools receive the case register through Strands `ToolContext.invocation_state`, so the same tools run against a local SQLite file or a remote dashboard. Intake (feed polling, page parsing, the distribution gate) happens in deterministic code before the orchestrator is invoked.
+- **Agents-as-tools.** The Matcher is a separate `Agent` that runs inside the `adjudicate_candidates` tool ([`agents/matcher.py`](app/recall_relay/agents/matcher.py)); the Notice writer is a separate `Agent` that runs inside `draft_notices` ([`agents/writer.py`](app/recall_relay/agents/writer.py)). Each has a narrow system prompt and returns a typed object, and the orchestrator only ever sees the typed result.
+- **`structured_output_model`.** `MatchVerdict`, `AgencyNotice`, `ClientSign`, and the extractor's `ExtractedNotice` are Pydantic models passed as `structured_output_model` at invocation. The ping is gated by a typed field, not by prose. Code post-validates every typed output (matched receipt ids must be candidates; a notice's disposition must equal the source's, or it is overwritten and the correction audited).
+- **Hooks** ([`agents/hooks.py`](app/recall_relay/agents/hooks.py)). `AuditHook` writes an audit row on `BeforeToolCallEvent` and `AfterToolCallEvent` (this is the trace the packet is built from). `ApprovalGuard` sets `cancel_tool` on `BeforeToolCallEvent` for `send_notices` unless the case carries `approved_at`, and always on a drill case. `TerminalToolGuard` sets `end_turn` on `AfterToolsEvent` once `request_approval`, `dismiss_case`, or `mark_needs_human` has run, so the run ends at the decision and the model cannot ping twice. The human-approval rule is enforced in a hook a judge can read, not in a prompt.
+- **`stream_async`** feeds a server-sent-events endpoint; the Run tab renders tool calls and verdicts as they happen, and replays the last finished run after a refresh.
+- **Model provider switch.** One environment variable selects `BedrockModel`, `AnthropicModel`, or an OpenAI-compatible endpoint (`agents/model_factory.py`). The same agent code runs locally and on the web host, and the same entrypoint is packaged for AgentCore Runtime.
 
 ### Amazon Bedrock AgentCore
 
-- **Runtime.** [`app/runtime_main.py`](app/runtime_main.py) wraps the same service functions in `BedrockAgentCoreApp` with a small payload contract (`scan`, `intake`, `approve`, `followups`, `status`, free-form `prompt`). It deploys with the AgentCore CLI using the CodeZip build (no container): `agentcore deploy` from the repo root; packaging is proven with `agentcore package`.
-- **Stateless by design.** The dashboard (FastAPI plus SQLite) is the system of record. The Runtime's data tools call it over an authenticated REST endpoint (`/api/data/rpc`), so `AGENT_BACKEND` is a transport switch, never a storage switch.
-- **Schedule-ready.** A daily EventBridge Scheduler target invoking the Runtime with `{"mode": "scan"}` is the intended production shape. The README claims a scheduled run only when one has been observed in CloudWatch. Deployment status: `AGENTCORE_STATUS`.
-- **Model note.** The live demo runs Claude Sonnet through an OpenAI-compatible endpoint because the hackathon AWS account was created on the final weekend and its Bedrock quota had not yet been raised from zero. The Bedrock path is the same `BedrockModel` code behind one environment variable.
+- **Runtime.** [`app/runtime_main.py`](app/runtime_main.py) wraps the same service functions in `BedrockAgentCoreApp` with a small payload contract (`scan`, `intake`, `approve`, `followups`, `status`, free-form `prompt`). It is configured for the AgentCore CLI's CodeZip build (no container) in [`agentcore/agentcore.json`](agentcore/agentcore.json).
+- **Status at submission: packaged, validated, not deployed.** `agentcore validate` passes and `agentcore package -r RecallRelay` produces the 65 MB CodeZip artifact on this repo. The hackathon AWS account was created on the final weekend and could not yet run Bedrock, so the Runtime was not launched. `agentcore deploy --yes` is the one remaining command. The public demo runs the same agent code on a conventional web host.
+- **Stateless by design.** The dashboard (FastAPI plus SQLite) is the system of record. The Runtime's data tools reach it through an authenticated REST endpoint (`POST /api/data/rpc`, shared secret, allow-listed store methods) via [`core/remote_store.py`](app/recall_relay/core/remote_store.py), so `AGENT_BACKEND` is a transport switch, never a storage switch. The endpoint and the remote store are covered by the dashboard's tests; the deployed Runtime has not exercised them yet.
+- **Schedule-ready, not scheduled.** A daily EventBridge Scheduler target invoking the Runtime with `{"mode": "scan"}` is the intended production shape. Nothing in this repo runs on a schedule today; the scan is a button and an API call.
+- **Model note.** The live demo runs Claude Sonnet 4.6 through an OpenAI-compatible endpoint (OpenRouter) because the new AWS account's Bedrock quota had not been raised from zero. The Bedrock path is the same `BedrockModel` code behind one environment variable (`MODEL_PROVIDER=bedrock`, default model `global.anthropic.claude-sonnet-4-6`).
 
 ## Data sources, and what was measured
 
@@ -99,7 +102,7 @@ All keyless and public. Measured on 2026-09-11.
 | Source | What it gives | What we measured |
 |---|---|---|
 | FDA recalls RSS | Same-day press releases (title, link, date) | 20 items; mixes food, drug, device, and pet-food items, so the press page's Product Type decides `is_food` |
-| FDA press pages | Products, UPCs as printed, lots, best-by, distribution sentence, disposition sentence | 200 with a browser User-Agent; a `python-requests` User-Agent is redirected to `/apology_objects/abuse-detection-apology.html`. The fetch tool detects the wall, caches pages, and routes blocked pages to NEEDS_HUMAN |
+| FDA press pages | Products, UPCs as printed, lots, best-by, distribution sentence, disposition sentence | 200 with a browser User-Agent from a residential connection; a `python-requests` User-Agent is redirected to `/apology_objects/abuse-detection-apology.html` (a 404 at the final URL). Datacenter egress is walled too: every live fetch from the public host was blocked. The fetch tool detects the wall and never parses the apology page; the 20 pages of the pinned feed are committed fixtures, and a blocked live item is counted as "blocked, paste to open" so the coordinator can paste the notice text |
 | openFDA food enforcement | Recall number, classification, `code_info`, distribution pattern | Refreshes weekly; `meta.last_updated` was nine days old; initiation-to-report lag on the 100 most recent records was min 11, median 33, max 196 days; `openfda.upc` was empty on 100 of 100. The demo recall returned zero rows nine days after its press release |
 | USDA FSIS recall API | Meat, poultry, egg products | 403 behind a bot wall. Paste path only, tagged `FSIS` |
 
@@ -107,7 +110,8 @@ All keyless and public. Measured on 2026-09-11.
 
 - **Live:** the FDA feed, the press pages, openFDA. The two recalls the demo turns on (H-1181-2026 and the September 2 expansion) are real and can be checked on fda.gov.
 - **Seeded:** the food bank, its 12 agencies, the 60-row ledger, and the 140-row distribution log. They are generated deterministically ([`core/seed.py`](app/recall_relay/core/seed.py)) and deliberately messy: store brands, blank UPCs, lots on about a third of rows, one salvage row.
-- **Pinned:** the scan merges a snapshot of the feed from 2026-09-11 with the live feed so the hero recall reproduces after it scrolls off the 20-item window.
+- **Pinned:** the scan merges a snapshot of the feed from 2026-09-11 (and a snapshot of 27 openFDA records) with the live feed and a live openFDA query, so the hero recall reproduces after it scrolls off the 20-item window. The press pages for the pinned feed are committed fixtures (`data/fixtures/press/index.json`), which is also what keeps the demo working from a host that fda.gov walls.
+- **Hosting:** the demo runs on a free web instance that sleeps when idle and loses its disk on every restart. The app seeds the ledger on boot, so a cold start shows the ledger and an empty case register; a GitHub Actions ping every 14 minutes ([`.github/workflows/keepalive.yml`](.github/workflows/keepalive.yml)) keeps it warm during judging. Agent runs are capped per day (`MAX_AGENT_RUNS_PER_DAY`) and scans are limited to one at a time.
 - **Email:** the in-app agency inbox mirror is the demo path, so a judge sees every notice without an email account. Amazon SES in sandbox mode can be enabled for verified inboxes; no production sending.
 - **Not covered:** FSIS and USDA Foods notices arrive only by paste or forward. openFDA lags; the press feed leads.
 - **Incumbents named:** Feeding America's national alert, Ceres (the ERP some large banks run), and Recall InfoLink cover the alert and the upstream. Recall Relay starts where the alert stops.
@@ -144,15 +148,27 @@ agentcore invoke --prompt '{"mode": "status"}'
 ## Repository layout
 
 ```
-app/recall_relay/core/      models, rules (the 15), store (SQLite register), intake (deterministic parsing), seed
-app/recall_relay/agents/    Strands agents: orchestrator, matcher, writer, extractor, hooks, service façade, mailer
-app/recall_relay/web/       FastAPI dashboard: ledger, run (SSE), cases, inbox mirror, packet (HTML + PDF), data RPC
+app/recall_relay/core/      models, rules (the 15), store (SQLite register), remote_store, intake (deterministic parsing), seed, config
+app/recall_relay/agents/    Strands agents: orchestrator, matcher, writer, extractor, hooks, service façade, model_factory, mailer
+app/recall_relay/web/       FastAPI dashboard: ledger, run (SSE), cases, inbox mirror, packet (HTML + PDF), data RPC, security
 app/runtime_main.py         AgentCore Runtime entrypoint (BedrockAgentCoreApp)
-agentcore/                  AgentCore CLI project config (CodeZip)
-data/fixtures/              cached FDA pages, feed snapshot, openFDA payloads, the seeded ledger CSVs
-docs/                       architecture diagram, decision log, builder.aws posts
-tests/                      offline test suite
+app/pyproject.toml          the Runtime package's dependencies (what CodeZip bundles)
+agentcore/                  AgentCore CLI project config (CodeZip) and its CDK scaffold
+data/fixtures/              cached FDA pages (21) with a URL index, feed snapshot, openFDA payloads, the seeded ledger CSVs
+docs/                       architecture diagram, decision log, Devpost text, video script, builder.aws posts
+scripts/                    seed_demo, intake_smoke, agent_smoke (one live run)
+tests/                      offline test suite (188)
+.github/workflows/          keepalive ping for the free demo host
 ```
+
+## Documentation
+
+- [DESIGN.md](DESIGN.md): the design system the dashboard follows (paper and ink, one accent, no dark mode).
+- [docs/DECISIONS.md](docs/DECISIONS.md): every scope and architecture call made during the build, with the reason, including what was cut and why.
+- [docs/DEVPOST.md](docs/DEVPOST.md): the submission text.
+- [docs/VIDEO_SCRIPT.md](docs/VIDEO_SCRIPT.md): the 75-second video script with screen cues.
+- [docs/builder-aws/](docs/builder-aws/): three build-story posts (the openFDA lag, the fda.gov abuse wall, the approval hook).
+- [.env.example](.env.example): every environment variable the app reads.
 
 ## Disclosure
 
