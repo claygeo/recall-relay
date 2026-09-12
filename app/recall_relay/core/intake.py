@@ -576,6 +576,39 @@ def _cache_path(cache_dir: Path, url: str) -> Path:
     return Path(cache_dir) / (hashlib.sha1(url.encode("utf-8")).hexdigest() + ".html")
 
 
+def _norm_url(url: str) -> str:
+    u = (url or "").strip().lower()
+    u = re.sub(r"^https?://", "", u)
+    u = re.sub(r"^www\.", "", u)
+    return u.rstrip("/")
+
+
+def fixture_for_url(url: str) -> Optional[str]:
+    """Read-only fallback: the committed fixture HTML for a URL listed in data/fixtures/press/index.json, else None.
+
+    fetch_url itself never consults fixtures (its tests mock the network). The service layer calls this when a
+    live fetch is blocked or fails, so the demo's press pages are served without network and nothing is ever
+    written into the fixtures directory.
+    """
+    try:
+        press_dir = Path(settings.fixtures_dir) / "press"
+        index = press_dir / "index.json"
+        if not index.is_file():
+            return None
+        import json
+
+        mapping = json.loads(index.read_text(encoding="utf-8"))
+        want = _norm_url(url)
+        for key, filename in mapping.items():
+            if _norm_url(key) == want:
+                f = press_dir / filename
+                if f.is_file():
+                    return f.read_text(encoding="utf-8", errors="replace")
+    except (OSError, ValueError):
+        return None
+    return None
+
+
 def fetch_url(url: str, *, cache_dir: Optional[Path] = None, timeout: float = 25.0) -> FetchResult:
     """GET a page with a real browser UA. Never raises: a dead network is a status-0 FetchResult.
 

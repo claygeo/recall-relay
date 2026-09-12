@@ -16,7 +16,7 @@ from ...core.models import ResponseStatus
 from ...core.rules import RESPONSE_OPTIONS
 from ...core.store import Store
 from .. import views
-from ..deps import get_store, maybe_store_audit, parse_int, render, service_module
+from ..deps import call_service, get_store, maybe_store_audit, parse_int, render, service_module
 from ..security import unsign_token
 
 router = APIRouter()
@@ -83,8 +83,8 @@ def _suggested_count(store: Store, case, agency_id: str) -> int:
     return sum(item.cases for item in case.pull_list.items if item.agency_id == agency_id)
 
 
-def _record(request: Request, store: Store, token: str, case_id: str, agency_id: str,
-            status: ResponseStatus, count: Optional[int], free_text: str) -> Response:
+async def _record(request: Request, store: Store, token: str, case_id: str, agency_id: str,
+                  status: ResponseStatus, count: Optional[int], free_text: str) -> Response:
     before = sum(1 for m in store.outbox(case_id, agency_id) if m["kind"] == "client_sign")
     maybe_store_audit(
         store,
@@ -96,7 +96,7 @@ def _record(request: Request, store: Store, token: str, case_id: str, agency_id:
     )
     try:
         service = service_module()
-        service.record_response(store, token, status, count, free_text)
+        await call_service(service.record_response, store, token, status, count, free_text)
     except Exception as exc:
         return render(
             request,
@@ -163,7 +163,7 @@ async def respond_get(request: Request, token: str, status: str = "") -> Respons
         )
         return render(request, "respond_confirm.html", **context)
 
-    return _record(request, store, real_token, case_id, agency_id, parsed, None, "")
+    return await _record(request, store, real_token, case_id, agency_id, parsed, None, "")
 
 
 @router.post("/r/{token}")
@@ -188,4 +188,4 @@ async def respond_post(
     n = parse_int(count, None) if str(count).strip() != "" else None
     if parsed in NEEDS_COUNT and n is None:
         n = 0
-    return _record(request, store, real_token, case_id, agency_id, parsed, n, str(free_text).strip())
+    return await _record(request, store, real_token, case_id, agency_id, parsed, n, str(free_text).strip())

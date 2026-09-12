@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from ...core.models import CaseStatus
 from ...core.store import Store
 from ..deps import (
+    call_service,
     form_or_json,
     get_store,
     limit_response,
@@ -232,13 +233,13 @@ def _control_error(request: Request, exc: Exception, *, case_id: str) -> Respons
 @router.post("/api/cases/{case_id}/approve")
 async def approve(request: Request, case_id: str) -> Response:
     store: Store = get_store(request)
-    case, missing = _case_or_404(request, case_id)
+    _case, missing = _case_or_404(request, case_id)
     if missing is not None:
         return missing
     maybe_store_audit(store, case_id, "coordinator", "ui_approve", "approve pressed in the dashboard")
     try:
         service = service_module()
-        service.approve(store, case_id)
+        await call_service(service.approve, store, case_id)
     except Exception as exc:
         return _control_error(request, exc, case_id=case_id)
     return redirect(request, f"/cases/{case_id}")
@@ -247,7 +248,7 @@ async def approve(request: Request, case_id: str) -> Response:
 @router.post("/api/cases/{case_id}/dismiss")
 async def dismiss(request: Request, case_id: str) -> Response:
     store: Store = get_store(request)
-    case, missing = _case_or_404(request, case_id)
+    _case, missing = _case_or_404(request, case_id)
     if missing is not None:
         return missing
     payload = await form_or_json(request)
@@ -255,7 +256,7 @@ async def dismiss(request: Request, case_id: str) -> Response:
     maybe_store_audit(store, case_id, "coordinator", "ui_dismiss", reason)
     try:
         service = service_module()
-        service.dismiss(store, case_id, reason)
+        await call_service(service.dismiss, store, case_id, reason)
     except Exception as exc:
         return _control_error(request, exc, case_id=case_id)
     return redirect(request, f"/cases/{case_id}")
@@ -264,7 +265,7 @@ async def dismiss(request: Request, case_id: str) -> Response:
 @router.post("/api/cases/{case_id}/resolve")
 async def resolve(request: Request, case_id: str) -> Response:
     store: Store = get_store(request)
-    case, missing = _case_or_404(request, case_id)
+    _case, missing = _case_or_404(request, case_id)
     if missing is not None:
         return missing
     payload = await form_or_json(request)
@@ -279,7 +280,7 @@ async def resolve(request: Request, case_id: str) -> Response:
     maybe_store_audit(store, case_id, "coordinator", "ui_resolve", f"{treat_as} :: {decision_text}")
     try:
         service = service_module()
-        service.resolve_needs_human(store, case_id, decision_text, treat_as)
+        await call_service(service.resolve_needs_human, store, case_id, decision_text, treat_as)
     except Exception as exc:
         return _control_error(request, exc, case_id=case_id)
     return redirect(request, f"/cases/{case_id}")
@@ -288,13 +289,13 @@ async def resolve(request: Request, case_id: str) -> Response:
 @router.post("/api/cases/{case_id}/close")
 async def close(request: Request, case_id: str) -> Response:
     store: Store = get_store(request)
-    case, missing = _case_or_404(request, case_id)
+    _case, missing = _case_or_404(request, case_id)
     if missing is not None:
         return missing
     maybe_store_audit(store, case_id, "coordinator", "ui_close", "close pressed in the dashboard")
     try:
         service = service_module()
-        service.close_case(store, case_id)
+        await call_service(service.close_case, store, case_id)
     except Exception as exc:
         return _control_error(request, exc, case_id=case_id)
     return redirect(request, f"/cases/{case_id}/packet")
@@ -321,7 +322,7 @@ async def followups_run(request: Request) -> Response:
     maybe_store_audit(store, "", "coordinator", "ui_followups", "run follow-ups pressed in the dashboard")
     try:
         service = service_module()
-        done = service.run_followups(store)
+        done = await call_service(service.run_followups, store)
     except Exception as exc:
         return _control_error(request, exc, case_id="")
     count = len(done) if isinstance(done, list) else (done or {}).get("sent", 0)

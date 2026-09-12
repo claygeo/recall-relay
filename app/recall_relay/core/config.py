@@ -44,6 +44,9 @@ class Settings:
     # agent backend for the dashboard: inprocess | agentcore
     agent_backend: str = field(default_factory=lambda: _env("AGENT_BACKEND", "inprocess"))
     agentcore_runtime_arn: str = field(default_factory=lambda: _env("AGENTCORE_RUNTIME_ARN"))
+    data_secret: str = field(default_factory=lambda: _env("AGENT_DATA_SECRET"))
+    max_agent_runs_per_day: int = field(default_factory=lambda: int(_env("MAX_AGENT_RUNS_PER_DAY", "60") or 60))
+    cache_dir: Path = field(default_factory=lambda: Path(_env("RECALL_RELAY_CACHE", str(ROOT / "data" / "runtime" / "cache"))))
     # fetch
     user_agent: str = field(default_factory=lambda: _env(
         "FETCH_USER_AGENT",

@@ -21,6 +21,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from rapidfuzz import fuzz
 from strands.models.model import Model
 
 from recall_relay.agents import matcher as matcher_mod
@@ -28,6 +29,7 @@ from recall_relay.agents import orchestrator as orch
 from recall_relay.agents import service, writer as writer_mod
 from recall_relay.agents.hooks import ApprovalGuard, AuditHook, TerminalToolGuard
 from recall_relay.core import rules
+from recall_relay.core.seed import load_seed
 from recall_relay.core.models import (
     Agency,
     AgencyNotice,
@@ -774,3 +776,298 @@ async def test_no_match_dismisses_silently(store, hero_notice):
     assert "16 oz" in case.dismissed_reason
     assert store.outbox(case.id) == []
     assert store.holds() == {}
+
+
+# ---------------------------------------------------------------------------
+# a model that follows the procedure instead of replaying a fixed script
+# ---------------------------------------------------------------------------
+def _tool_names(messages) -> list[str]:
+    out = []
+    for message in messages:
+        for block in message.get("content", []) or []:
+            if isinstance(block, dict) and "toolUse" in block:
+                out.append(block["toolUse"].get("name", ""))
+    return out
+
+
+def _tool_result_text(messages) -> str:
+    parts = []
+    for message in messages:
+        for block in message.get("content", []) or []:
+            if isinstance(block, dict) and "toolResult" in block:
+                for item in block["toolResult"].get("content", []) or []:
+                    if "text" in item:
+                        parts.append(str(item["text"]))
+                    elif "json" in item:
+                        parts.append(json.dumps(item["json"]))
+    return " ".join(parts)
+
+
+def follow_the_procedure(messages):
+    """The orchestrator's system prompt, expressed as code, so a test can branch on the verdict."""
+    called = _tool_names(messages)
+    results = _tool_result_text(messages)
+    if "load_case" not in called:
+        return [("load_case", {})]
+    if "score_candidates" not in called:
+        return [("score_candidates", {})]
+    if "adjudicate_candidates" not in called:
+        return [("adjudicate_candidates", {})]
+    if '"verdict": "NEEDS_HUMAN"' in results:
+        return [("mark_needs_human", {"reason": "the ledger row carries no brand; a human must confirm it"})]
+    if '"verdict": "NO_MATCH"' in results:
+        return [("dismiss_case", {"reason": "no ledger row is this product"})]
+    if "build_pull_list" not in called:
+        return [("build_pull_list", {})]
+    if "draft_notices" not in called:
+        return [("draft_notices", {})]
+    return [("request_approval", {})]
+
+
+class ReactiveModel(ScriptedModel):
+    """ScriptedModel whose next step is chosen from the conversation so far."""
+
+    def __init__(self, decide=follow_the_procedure):
+        super().__init__([])
+        self.decide = decide
+
+    async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+        self.script = list(self.script) + [self.decide(messages)]
+        async for event in super().stream(messages, tool_specs, system_prompt, **kwargs):
+            yield event
+
+
+def rule_following_matcher() -> FakeStructuredAgent:
+    """A matcher stub that reads the candidate rows out of the prompt and applies rules 3, 4 and 5.
+
+    Brand + product line + size decide (rule 3). A row whose product and size are exact but which carries
+    no brand at all is the ambiguous case, and ambiguity is NEEDS_HUMAN, never NO_MATCH (rule 5).
+    """
+
+    def produce(prompt: str) -> MatchVerdict:
+        block = prompt.split("=== CANDIDATE LEDGER ROWS")[1].split("=== COORDINATOR DECISIONS")[0]
+        rows = [json.loads(line.strip()) for line in block.splitlines() if line.strip().startswith("{")]
+
+        matched = [r for r in rows if r["scores"]["brand"] >= 90 and r["scores"]["size"] >= 100]
+        if matched:
+            return MatchVerdict(
+                verdict=Verdict.MATCH,
+                matched_receipt_ids=[r["receipt_id"] for r in matched],
+                evidence=[f"receipt {r['receipt_id']}: brand, product line and size all agree" for r in matched],
+                confidence=0.93,
+                widening_applied=False,
+                reason="brand and product line match; size confirms",
+            )
+
+        unsure = [
+            r for r in rows
+            if r["scores"]["product"] >= 95 and r["scores"]["size"] >= 100 and r["scores"]["brand"] < 50
+        ]
+        if unsure:
+            return MatchVerdict(
+                verdict=Verdict.NEEDS_HUMAN,
+                matched_receipt_ids=[],
+                evidence=[
+                    f"receipt {r['receipt_id']}: product and size are an exact match but the ledger row "
+                    f"carries no brand, so this could be the recalled firm or another supplier"
+                    for r in unsure
+                ],
+                confidence=0.45,
+                widening_applied=False,
+                reason=(
+                    f"receipt {unsure[0]['receipt_id']} is an unbranded row; a human must confirm the "
+                    f"supplier before anyone is told to pull it (rule 5)"
+                ),
+            )
+
+        return MatchVerdict(
+            verdict=Verdict.NO_MATCH,
+            matched_receipt_ids=[],
+            evidence=[f"receipt {r['receipt_id']}: different product" for r in rows],
+            confidence=0.88,
+            widening_applied=False,
+            reason="nothing in the ledger is this product",
+        )
+
+    return FakeStructuredAgent(produce)
+
+
+@pytest.fixture
+def seeded_store(tmp_path) -> Store:
+    s = Store(tmp_path / "seeded.db")
+    load_seed(s)
+    return s
+
+
+async def _scan_offline(store: Store) -> list[dict]:
+    """The full three-source scan with the models stubbed. No network, no model calls."""
+    events: list[dict] = []
+    async for event in service.scan(
+        store,
+        live=False,
+        snapshot=True,
+        openfda=True,
+        agent_factory=lambda: orch.build_orchestrator(store, model=ReactiveModel()),
+        invocation_extras={
+            "matcher_agent": rule_following_matcher(),
+            "writer_agent": fake_writer_agent(),
+            "sign_agent": fake_sign_agent(),
+        },
+    ):
+        events.append(event)
+    return events
+
+
+# ---------------------------------------------------------------------------
+# the openFDA sweep: the third source
+# ---------------------------------------------------------------------------
+async def test_scan_over_both_feeds_produces_exactly_the_two_live_beats(seeded_store):
+    events = await _scan_offline(seeded_store)
+
+    feeds = {(e["source"], e.get("origin")) for e in events if e["type"] == "feed"}
+    assert ("snapshot", None) in feeds and ("openfda", "snapshot") in feeds
+
+    tally = [e for e in events if e["type"] == "done"][-1]["tally"]
+    assert tally["errors"] == 0
+    assert tally["openfda_seen"] == 27
+
+    awaiting = seeded_store.list_cases(status=CaseStatus.AWAITING_APPROVAL)
+    needs_human = seeded_store.list_cases(status=CaseStatus.NEEDS_HUMAN)
+    assert len(awaiting) == 1, [c.notice.title for c in awaiting]
+    assert len(needs_human) == 1, [c.notice.title for c in needs_human]
+
+    # beat 1: the press release the food bank actually received
+    hero = awaiting[0]
+    assert hero.notice.source == Source.FDA_RSS
+    assert "Triple Berry" in " ".join(p.name for p in hero.notice.products)
+    assert hero.verdict is not None and hero.verdict.matched_receipt_ids == [17]
+    assert hero.pull_list is not None and hero.pull_list.on_hand_cases == 8
+    assert 17 in seeded_store.holds()
+
+    # beat 2: the recall that never got a press release, found only by the openFDA sweep
+    blueberries = needs_human[0]
+    assert blueberries.notice.source == Source.OPENFDA
+    assert blueberries.notice.recall_number == "H-1181-2026"
+    assert "Blueberries" in " ".join(p.name for p in blueberries.notice.products)
+    assert blueberries.verdict is not None
+    assert blueberries.verdict.verdict == Verdict.NEEDS_HUMAN
+    assert "34" in blueberries.verdict.reason or any("34" in e for e in blueberries.verdict.evidence)
+    # nothing was sent and nothing was held on an unresolved ambiguity
+    assert seeded_store.outbox(blueberries.id) == []
+    assert 34 not in seeded_store.holds()
+
+    # the enforcement record rode along on the case, initiation date and all
+    assert blueberries.enrichment is not None
+    assert blueberries.enrichment.recall_initiation_date == date(2026, 7, 3)
+
+
+async def test_openfda_record_for_an_existing_case_enriches_it_and_never_re_pings(seeded_store, hero_notice):
+    case, _ = await run_hero(seeded_store, hero_notice)
+    assert case.status == CaseStatus.AWAITING_APPROVAL
+    assert case.notice.recall_number == ""
+    before = len(seeded_store.list_cases())
+
+    record = {
+        "recall_number": "H-0901-2026",
+        "classification": "Class I",
+        "recalling_firm": "Frutas y Hortalizas del Sur S.A.",
+        "product_description": "Great Value Organic Triple Berry Blend, Net Wt 10 oz plastic bag. Keep Frozen",
+        "code_info": "Lot 6040 01-6 Best by Date Feb 09 2028",
+        "distribution_pattern": "FL",
+        "status": "Ongoing",
+        "product_type": "Food",
+        "reason_for_recall": "Potential E. coli O145 contamination",
+        "recall_initiation_date": "20260902",
+        "report_date": "20260925",
+    }
+    notice, enrichment = service.notice_from_openfda(record, seeded_store.now())
+
+    found = service.find_same_recall_case(seeded_store, notice)
+    assert found is not None and found.id == case.id
+
+    service.attach_enrichment(seeded_store, found, enrichment)
+    after = seeded_store.get_case(case.id)
+    assert len(seeded_store.list_cases()) == before, "enrichment must never open a second case (rule 1)"
+    assert after.enrichment is not None and after.enrichment.recall_number == "H-0901-2026"
+    assert after.notice.recall_number == "H-0901-2026"
+    assert after.status == CaseStatus.AWAITING_APPROVAL, "still one decision, not a second ping"
+    assert seeded_store.outbox(case.id) == []
+    assert any(e.kind == "enriched" for e in seeded_store.events(case.id))
+
+
+def test_sibling_recalls_from_one_firm_are_not_folded_together(seeded_store):
+    """Taylor Farms has thirteen live records in the fixtures; they are thirteen recalls, not one."""
+    records = {r["recall_number"]: r for r in service.openfda_snapshot_records()}
+    taylor = [r for r in records.values() if r["recalling_firm"].startswith("Taylor Farms")]
+    assert len(taylor) >= 5
+
+    # Pick a pair the fuzzy matcher WOULD fold together, so the guard is actually under test:
+    # H-1264 and H-1269 are two separate Dreyer's recalls whose product lines read identically.
+    first, second = records["H-1264-2026"], records["H-1269-2026"]
+    n_a, _ = service.notice_from_openfda(first, seeded_store.now())
+    n_b, _ = service.notice_from_openfda(second, seeded_store.now())
+    assert n_a.firm == n_b.firm
+    assert fuzz.token_set_ratio(
+        n_a.products[0].name.lower(), n_b.products[0].name.lower()
+    ) >= service.SAME_RECALL_PRODUCT_RATIO, "the pair must collide or this test proves nothing"
+
+    n1, e1 = service.notice_from_openfda(first, seeded_store.now())
+    case = service._open_case(seeded_store, n1)
+    service.attach_enrichment(seeded_store, case, e1)
+
+    n2, _ = service.notice_from_openfda(second, seeded_store.now())
+    assert service.find_same_recall_case(seeded_store, n2) is None
+
+    # ...but the same record seen again is the same case, so a weekly sweep never re-pings (rule 14)
+    n1_again, _ = service.notice_from_openfda(first, seeded_store.now())
+    assert service.find_same_recall_case(seeded_store, n1_again).id == case.id
+
+    # and the blueberries record is not the Triple Berry recall, though the firm is identical
+    blue, _ = service.notice_from_openfda(records["H-1181-2026"], seeded_store.now())
+    hero_case = service._open_case(
+        seeded_store,
+        RecallNotice(
+            source=Source.FDA_RSS, source_url=HERO_URL,
+            source_seen_at=datetime(2026, 9, 3, tzinfo=timezone.utc),
+            firm="Frutas y Hortalizas del Sur S.A.",
+            products=[ProductLine(brand="Great Value", name="Organic Triple Berry Blend", size="10 oz")],
+            reason="E. coli O145",
+        ),
+    )
+    assert service.find_same_recall_case(seeded_store, blue) is None
+    assert hero_case.id != case.id
+
+
+def test_openfda_product_description_splits_into_name_and_size():
+    name, size = service.split_product_description(
+        "Organic Whole Blueberries, Net Wt 10 oz (284g) plastic bag, packed in 8 bags per case of "
+        "10 oz each. Keep Frozen"
+    )
+    assert name == "Organic Whole Blueberries"
+    assert size == "10 oz"
+
+    name, size = service.split_product_description(
+        "GHIRARDELLI SWEET GROUND POWDER WHITE CHOCOLATE FLAVORED NET WT 50oz (3lbs 2oz) 1.41kg  "
+        "Distributed by Ghirardelli Chocolate Company, San Leandro, CA 94578, U.S.A."
+    )
+    assert "GHIRARDELLI SWEET GROUND POWDER WHITE CHOCOLATE FLAVORED" in name
+    assert "Distributed by" not in name
+    assert size == "50oz"
+
+
+def test_openfda_notice_anchors_the_window_on_the_report_date_not_the_initiation_date(seeded_store):
+    """The sweep exists to catch receipts logged during openFDA's classification lag."""
+    records = {r["recall_number"]: r for r in service.openfda_snapshot_records()}
+    notice, enrichment = service.notice_from_openfda(records["H-1181-2026"], seeded_store.now())
+
+    assert notice.announcement_date is None
+    assert notice.publish_date == date(2026, 7, 22)
+    assert enrichment.recall_initiation_date == date(2026, 7, 3)
+
+    start, end = rules.candidate_window(notice)
+    receipt = seeded_store.get_receipt(34)
+    assert receipt is not None and receipt.received_at == date(2026, 7, 28)
+    assert start <= receipt.received_at <= end, "receipt 34 must be inside the window or the beat is lost"
+
+    candidates = rules.score_candidates(seeded_store.list_receipts(), notice)
+    assert [c.receipt_id for c in candidates] == [34]

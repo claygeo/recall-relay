@@ -3,6 +3,7 @@
 """
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import Any, Optional
 
@@ -114,6 +115,19 @@ def service_module() -> Any:
     return service
 
 
+async def call_service(fn: Any, *args: Any, **kwargs: Any) -> Any:
+    """Call a service function and await it if it turns out to be a coroutine.
+
+    The façade's contract was specified async and is currently implemented sync (approve, dismiss,
+    resolve_needs_human, record_response, run_followups, close_case). Both shapes are correct callers'
+    business, so the web layer tolerates either and the merge point cannot break on it.
+    """
+    result = fn(*args, **kwargs)
+    if inspect.isawaitable(result):
+        return await result
+    return result
+
+
 def maybe_store_audit(store: Store, case_id: str, actor: str, kind: str, detail: str) -> None:
     """Audit and never let the audit be the thing that breaks a control."""
     try:
@@ -133,6 +147,7 @@ __all__ = [
     "STATIC_DIR",
     "TEMPLATES_DIR",
     "base_context",
+    "call_service",
     "form_or_json",
     "get_store",
     "limit_response",

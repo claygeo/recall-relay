@@ -296,6 +296,13 @@ def find_same_recall_case(store: Store, notice: RecallNotice) -> Optional[Recall
     for case in store.list_cases(include_drills=False):
         if rules._norm(case.notice.firm) != firm:
             continue
+        # A case that already carries a DIFFERENT recall number is a different recall, however similar the
+        # product line reads. One firm routinely has a dozen live enforcement records -- Taylor Farms has
+        # thirteen in these fixtures -- and folding them together would lose twelve of them. The fuzzy path
+        # exists only to stop an enforcement record from duplicating a press-release or pasted case that
+        # has no number yet.
+        if case.notice.recall_number and case.notice.recall_number != notice.recall_number:
+            continue
         theirs = [rules._norm(n) for n in _product_names(case.notice)]
         for a in mine:
             for b in theirs:
@@ -456,7 +463,7 @@ async def scan(
 
     if live:
         try:
-            fresh = intake.poll_fda_rss(cache_dir=Path(settings.fixtures_dir) / "rss")
+            fresh = intake.poll_fda_rss(cache_dir=Path(settings.cache_dir) / "rss")
         except Exception as exc:
             fresh = []
             yield {
@@ -640,11 +647,15 @@ async def scan(
 
 
 def _fetch_press(url: str) -> tuple[str, str, bool]:
-    """Fixture first, network second. Returns (html, origin, blocked)."""
+    """Fixture first, network second. Returns (html, origin, blocked).
+
+    Fetched pages are cached under `settings.cache_dir`, never under `data/fixtures` -- the fixture
+    directory is committed and its contents are counted by tests, so a scan must not write into it.
+    """
     fixture = _press_fixture_index().get(_norm_link(url))
     if fixture:
         return Path(fixture).read_text(encoding="utf-8", errors="ignore"), "fixture", False
-    result = intake.fetch_url(url, cache_dir=Path(settings.fixtures_dir) / "press")
+    result = intake.fetch_url(url, cache_dir=Path(settings.cache_dir) / "press")
     return result.text, ("cache" if result.from_cache else "network"), bool(result.blocked)
 
 

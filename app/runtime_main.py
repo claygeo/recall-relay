@@ -40,6 +40,19 @@ def _store():
     return Store(settings.db_path)
 
 
+async def _call(fn, *args, **kwargs):
+    """The service façade mixes sync and async functions; run sync ones off the event loop."""
+    import asyncio
+    import inspect
+
+    if inspect.iscoroutinefunction(fn):
+        return await fn(*args, **kwargs)
+    result = await asyncio.to_thread(fn, *args, **kwargs)
+    if inspect.isawaitable(result):
+        return await result
+    return result
+
+
 async def _dispatch(payload: dict[str, Any]) -> AsyncIterator[dict[str, Any]]:
     from recall_relay.agents import service
 
@@ -53,21 +66,29 @@ async def _dispatch(payload: dict[str, Any]) -> AsyncIterator[dict[str, Any]]:
         return
     if mode == "intake":
         if payload.get("url"):
-            case = await service.intake_url(store, payload["url"])
+            case = await _call(service.intake_url, store, payload["url"])
         else:
-            case = await service.intake_text(store, payload.get("text", ""))
-        yield {"type": "done", "case_id": case.id, "status": case.status.value, "ping": service.ping_text(case)}
+            case = await _call(service.intake_text, store, payload.get("text", ""))
+        yield {"type": "done", "case_id": case.id, "status": case.status.value, "ping": service.ping_text(case, store)}
         return
     if mode == "approve":
-        case = await service.approve(store, payload["case_id"])
+        case = await _call(service.approve, store, payload["case_id"])
         yield {"type": "done", "case_id": case.id, "status": case.status.value, "notices_sent": len(case.notices)}
         return
     if mode == "followups":
-        result = await service.run_followups(store)
-        yield {"type": "done", **(result if isinstance(result, dict) else {"result": str(result)})}
+        result = await _call(service.run_followups, store)
+        if isinstance(result, dict):
+            yield {"type": "done", **result}
+        else:
+            items = list(result or [])
+            yield {"type": "done", "sent": len(items), "items": items}
         return
     if mode == "prompt":
-        async for ev in service.answer(store, payload["prompt"]):
+        answer = getattr(service, "answer", None)
+        if answer is None:
+            yield {"type": "error", "error": "free-form prompt mode is not enabled in this build"}
+            return
+        async for ev in answer(store, payload["prompt"]):
             yield ev
         return
     # status

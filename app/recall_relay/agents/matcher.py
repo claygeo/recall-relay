@@ -42,6 +42,15 @@ the row MATCHES and every case on it is affected. Set widening_applied=true and 
 Never reason "the receipt has no lot, so we cannot tell, so skip it". The food bank cannot tell either,
 which is exactly why the whole line comes off the shelf.
 
+RULE 4 IS ABOUT LOTS, NOT ABOUT IDENTITY. A missing lot widens a line you have ALREADY identified. A
+missing brand is a different thing entirely: it means you do not know whose product the row is. If the
+ledger row carries no brand and the notice does not pin the product some other way (a UPC, a distinctive
+product name only that firm sells), then "no brand on either side" is NOT "no conflict" -- it is an
+unidentified row. A commodity line like frozen blueberries, rice or shredded cheese is sold by a dozen
+suppliers into the same pantry, so an unbranded row that matches only on product name and size is exactly
+the ambiguity rule 5 was written for. Return NEEDS_HUMAN and ask which supplier that row came from. Do not
+reason "neither side has a brand, therefore they agree".
+
 RULE 5 -- AMBIGUITY IS NEEDS_HUMAN, NEVER NO_MATCH. If you are genuinely unsure -- a plausible brand with
 the wrong size, a product name that could be two different items, a firm that also supplies a different
 brand -- return NEEDS_HUMAN and name the specific question a human should answer. NO_MATCH is only for

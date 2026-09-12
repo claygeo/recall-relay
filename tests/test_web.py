@@ -673,3 +673,22 @@ def test_demo_reset_is_throttled(client):
     assert client.post("/api/demo/reset", headers={"Accept": "application/json"}).status_code == 200
     second = client.post("/api/demo/reset", headers={"Accept": "application/json"})
     assert second.status_code == 429
+
+
+def test_the_service_boundary_tolerates_an_async_facade(client, web_store, stub_service, monkeypatch):
+    """The façade's contract was specified async and is currently implemented sync. Either must work,
+    because the web layer and the agent layer were built by different hands against the same brief."""
+    case = build_closed_case(web_store)
+
+    async def async_close_case(store, case_id):
+        stub_service.calls.append(("close_case_async", case_id))
+        c = store.get_case(case_id)
+        c.status = CaseStatus.CLOSED
+        store.save_case(c)
+        return c
+
+    monkeypatch.setattr(stub_service, "close_case", async_close_case)
+    response = client.post(f"/api/cases/{case.id}/close", headers={"Accept": "application/json"})
+    assert response.status_code == 200
+    assert response.json()["redirect"] == f"/cases/{case.id}/packet"
+    assert ("close_case_async", case.id) in stub_service.calls
