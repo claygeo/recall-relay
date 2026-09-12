@@ -50,3 +50,15 @@ review. Recorded so the operator can audit them.
     verification. If Bedrock is still unusable by the Sunday-noon gate, the deployed AgentCore Runtime
     runs Claude via OpenRouter through an AgentCore API-key credential (same OpenAIModel code path as
     local), and the README says so in one sentence. Never block the build on Bedrock.
+
+## 2026-09-12 (Sat, ~03:45 ET): public host findings
+
+18. **fda.gov walls Render's egress.** Every non-fixture press page came back blocked on the public host
+    (the abuse wall the refuters predicted for datacenter IPs). Fix shipped: all 20 pinned-feed pages are
+    committed fixtures (`data/fixtures/press/index.json`), so the demo scan never touches fda.gov; new
+    live items that are blocked are counted as "blocked, paste to open", not as errors. Paste intake works.
+19. **Render free tier is ephemeral.** A redeploy or a spin-down restart loses the SQLite file; the app
+    self-seeds the ledger on boot, cases do not survive. A GitHub Actions ping every 14 minutes keeps the
+    instance warm. Durable state needs the Starter plan plus a persistent disk (~$7.25/mo): the operator's call.
+20. **The deployed model is Claude Sonnet via OpenRouter**, budget-capped at 4 agent runs per day until
+    Bedrock quota is raised or the OpenRouter balance is topped up. Stated in the README.
