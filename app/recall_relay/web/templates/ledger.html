@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Receiving ledger · Recall Relay{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Receiving ledger</h1>
+  <div class="sub">What came in, what went out, and who it went to. A recall is only answerable if this page exists.</div>
+</div>
+
+<section class="sheet sheet--flush">
+  <div class="sheet-head">
+    <span class="eyebrow">Receiving ledger · {{ food_bank }}</span>
+    <h2>Every row received</h2>
+    <div class="counts">
+      Receipts <b>{{ counts.receipts }}</b> ·
+      Agencies <b>{{ counts.agencies }}</b> ·
+      Cases on hand <b>{{ counts.on_hand }}</b> ·
+      On HOLD <b>{{ counts.holds }}</b>
+    </div>
+  </div>
+  <div class="table-scroll">
+    <table class="ledger sticky">
+      <thead>
+        <tr>
+          <th>Receipt</th>
+          <th>Received</th>
+          <th>Donor / channel</th>
+          <th>Brand</th>
+          <th>Product</th>
+          <th>Size</th>
+          <th>UPC as printed</th>
+          <th>Lot</th>
+          <th>Best by</th>
+          <th class="num">Cases</th>
+          <th class="num">On hand</th>
+          <th>Storage</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        {% set r = row.receipt %}
+        <tr {% if row.hold_case_id %}class="held"{% endif %}>
+          <td class="id">{{ "%04d"|format(r.id) }}</td>
+          <td class="code dim">{{ r.received_at }}</td>
+          <td class="dim">{{ r.donor }}</td>
+          <td>{{ r.brand or "—" }}</td>
+          <td>
+            {{ r.product }}
+            {% if row.hold_case_id %}
+            <a class="tag tag--hold" href="/cases/{{ row.hold_case_id }}" title="Held for {{ row.hold_case_id }}">Hold</a>
+            {% endif %}
+          </td>
+          <td class="dim">{{ r.size or "—" }}</td>
+          <td class="code dim">{{ r.upc or "—" }}</td>
+          <td class="code">{{ r.lot or "—" }}</td>
+          <td class="code dim">{{ r.best_by or "—" }}</td>
+          <td class="num">{{ r.cases }}</td>
+          <td class="num">{{ row.on_hand }}</td>
+          <td class="dim">{{ r.storage }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="12" class="empty">The ledger is empty. Seed the demo data to populate it.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="sheet sheet--flush">
+  <div class="sheet-head">
+    <span class="eyebrow">Distribution log</span>
+    <h2>What left the building</h2>
+    <div class="counts">Shipments <b>{{ counts.distributions }}</b> · showing <b>{{ dist_from }}–{{ dist_to }}</b></div>
+  </div>
+  <div class="table-scroll">
+    <table class="ledger">
+      <thead>
+        <tr>
+          <th>Shipment</th>
+          <th>Shipped</th>
+          <th>Receipt</th>
+          <th>Product</th>
+          <th>Agency</th>
+          <th class="num">Cases</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in dist_rows %}
+        <tr>
+          <td class="id">{{ "%04d"|format(row.dist.id) }}</td>
+          <td class="code dim">{{ row.dist.shipped_at }}</td>
+          <td class="id">{{ "%04d"|format(row.dist.receipt_id) }}</td>
+          <td>{{ row.brand }}{% if row.brand %} {% endif %}{{ row.product }}</td>
+          <td class="dim">{{ row.agency_name }}</td>
+          <td class="num">{{ row.dist.cases }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">Nothing has shipped yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if dist_pages > 1 %}
+  <div class="sheet-body pager">
+    {% if dist_page > 1 %}<a href="/ledger?dist={{ dist_page - 1 }}">← previous</a>{% endif %}
+    <span>page {{ dist_page }} of {{ dist_pages }}</span>
+    {% if dist_page < dist_pages %}<a href="/ledger?dist={{ dist_page + 1 }}">next →</a>{% endif %}
+  </div>
+  {% endif %}
+</section>
+
+<section class="sheet sheet--flush">
+  <div class="sheet-head">
+    <span class="eyebrow">Partner agencies</span>
+    <h2>Who receives from us</h2>
+    <div class="counts">Agencies <b>{{ counts.agencies }}</b></div>
+  </div>
+  <div class="table-scroll">
+    <table class="ledger">
+      <thead>
+        <tr>
+          <th>Id</th>
+          <th>Agency</th>
+          <th>Kind</th>
+          <th>Open</th>
+          <th>Languages</th>
+          <th>Same-day</th>
+          <th>Contact</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in agencies %}
+        <tr>
+          <td class="id">{{ a.id }}</td>
+          <td><a href="/inbox/{{ a.id }}">{{ a.name }}</a></td>
+          <td class="dim">{{ a.kind }}</td>
+          <td class="dim">{{ a.open_schedule }}</td>
+          <td class="code dim">{{ a.languages|join(" · ") }}</td>
+          <td>{% if a.same_day_distribution %}<span class="tag t-warn"><span class="dot"></span>Same day</span>{% else %}<span class="dim">—</span>{% endif %}</td>
+          <td class="dim">{{ a.contact_name }} · {{ a.contact_email }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">No partner agencies on file.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

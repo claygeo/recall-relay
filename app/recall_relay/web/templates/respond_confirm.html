@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Confirm · Recall Relay{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ agency.name if agency else "Your pantry" }}</h1>
+  <div class="sub">One number and you are done. Nobody is marked confirmed until you actually answer.</div>
+</div>
+
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="eyebrow">Recall {{ case.notice.recall_number or "pending" }} · {{ case.id }}</span>
+    <h2>{{ headline }}</h2>
+  </div>
+
+  <p class="lead" style="max-width: 62ch;">{{ prompt }}</p>
+
+  <form method="post" action="/r/{{ token }}" style="margin-top: 24px;">
+    <input type="hidden" name="status" value="{{ status }}">
+    <label class="field">
+      <span>How many cases?</span>
+      <input type="number" name="count" min="0" step="1" value="{{ suggested_count }}" required>
+    </label>
+    <label class="field">
+      <span>Anything we should know? (optional)</span>
+      <input type="text" name="free_text" placeholder="e.g. two cases went out Thursday morning">
+    </label>
+    <button class="btn" type="submit">Send my answer</button>
+  </form>
+</section>
+
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="eyebrow">The notice you received</span>
+    <h2>{{ mail.subject if mail else "Recall notice" }}</h2>
+  </div>
+  {% if mail %}<div class="mail-body">{{ mail.body }}</div>{% endif %}
+</section>
+{% endblock %}

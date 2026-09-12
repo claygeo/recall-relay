@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "disclaimer": "Do not rely on openFDA to make decisions regarding medical care. While we make every effort to ensure that data is accurate, you should assume all results are unvalidated. We may limit or otherwise restrict your access to the API in line with our Terms of Service.",
+    "terms": "https://open.fda.gov/terms/",
+    "license": "https://open.fda.gov/license/",
+    "last_updated": "2026-09-02",
+    "results": {
+      "skip": 0,
+      "limit": 1,
+      "total": 1
+    }
+  },
+  "results": [
+    {
+      "status": "Ongoing",
+      "city": "San Leandro",
+      "state": "CA",
+      "country": "United States",
+      "classification": "Class I",
+      "openfda": {},
+      "product_type": "Food",
+      "event_id": "98851",
+      "recalling_firm": "Ghirardelli Chocolate Company",
+      "address_1": "1111 139th Ave",
+      "address_2": "",
+      "postal_code": "94578-2616",
+      "voluntary_mandated": "Voluntary: Firm initiated",
+      "initial_firm_notification": "E-Mail",
+      "distribution_pattern": "U.S. Distribution Pattern: AK, AZ, CA, FL, GA, ID, IL, IN, KY, MD, ME, MN, NC, NJ, NV, NY, OH, OK, OR, PA, SC, TN, TX, UT, VA, WA, WI. Foreign Distribution Pattern: Canada, Guatemala, Japan, Philippines, United Kingdom, South Korea.",
+      "recall_number": "H-0844-2026",
+      "product_description": "GHIRARDELLI SWEET GROUND POWDER WHITE CHOCOLATE FLAVORED NET WT 50oz (3lbs 2oz) 1.41kg  Distributed by Ghirardelli Chocolate Company, San Leandro, CA 94578, U.S.A.  UPC: 747599620386",
+      "product_quantity": "2,267 cases (6-50oz units/case); 13,602 units",
+      "reason_for_recall": "Potential contamination with Salmonella.",
+      "recall_initiation_date": "20260426",
+      "center_classification_date": "20260521",
+      "report_date": "20260527",
+      "code_info": "Lot, Best if Used By: S394260, 7/31/2027; S494260, 7/31/2027; S594260, 7/31/2027.",
+      "more_code_info": ""
+    }
+  ]
+}

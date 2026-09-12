@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Cases · Recall Relay{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Case register</h1>
+  <div class="sub">One row per recall this food bank has seen. Newest first. Nothing is deleted, including the dismissals.</div>
+</div>
+
+<section class="sheet sheet--flush">
+  <div class="sheet-head">
+    <span class="eyebrow">Cases</span>
+    <h2>Every recall, every verdict</h2>
+    <div class="counts">
+      Cases <b>{{ total }}</b>
+      {%- for status, n in by_status.items() %} · {{ status|replace("_", " ")|capitalize }} <b>{{ n }}</b>{% endfor %}
+    </div>
+  </div>
+  <div class="table-scroll">
+    <table class="ledger">
+      <thead>
+        <tr>
+          <th>Case</th>
+          <th>Opened</th>
+          <th>Status</th>
+          <th>Product</th>
+          <th>Firm</th>
+          <th>Recall no.</th>
+          <th class="num">Rows</th>
+          <th class="num">Agencies</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="id"><a href="/cases/{{ row.case.id }}">{{ row.case.id }}</a></td>
+          <td class="code dim">{{ row.created }}</td>
+          <td><span class="tag t-{{ row.status_tone }}"><span class="dot"></span>{{ row.status_label }}</span></td>
+          <td>{{ row.headline }}</td>
+          <td class="dim">{{ row.firm }}</td>
+          <td class="code dim">{{ row.recall_number or "—" }}</td>
+          <td class="num">{{ row.matched }}</td>
+          <td class="num">{{ row.agencies }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty">No cases yet. Run the daily scan, or paste a notice on the Run page.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

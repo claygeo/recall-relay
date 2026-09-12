@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Recall Relay{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<link rel="stylesheet" href="/static/app.css?v=1">
+{% block head %}{% endblock %}
+</head>
+<body data-active-job="{{ active_job or '' }}">
+<header class="topbar no-print">
+  <div class="topbar-inner">
+    <a class="wordmark" href="/">Recall<span class="rel">&nbsp;Relay</span></a>
+    <span class="topbar-org">{{ food_bank }}</span>
+    <nav class="tabs">
+      <a href="/ledger" {% if tab == 'ledger' %}aria-current="page"{% endif %}>Ledger</a>
+      <a href="/run" {% if tab == 'run' %}aria-current="page"{% endif %}>Run</a>
+      <a href="/cases" {% if tab == 'cases' %}aria-current="page"{% endif %}>Cases</a>
+      <a href="/packet" {% if tab == 'packet' %}aria-current="page"{% endif %}>Packet</a>
+      <a href="/inbox" {% if tab == 'inbox' %}aria-current="page"{% endif %}>Inbox</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="flash no-print" id="flash" hidden></div>
+  {% block content %}{% endblock %}
+
+  {% block demo_strip %}
+  <div class="demo-strip no-print">
+    <span>Demo clock {% if clock_offset %}+{{ clock_offset }}h{% else %}real time{% endif %}</span>
+    <span>·</span>
+    <span>Agent budget {{ budget_used }}/{{ budget_limit }} today</span>
+    <span>·</span>
+    <button class="link-btn" data-post="/api/demo/reset"
+            data-confirm="Reset the demo? The receiving ledger stays; every case, hold, notice and response is cleared.">Reset demo</button>
+  </div>
+  {% endblock %}
+</main>
+
+<script src="/static/app.js?v=1"></script>
+</body>
+</html>

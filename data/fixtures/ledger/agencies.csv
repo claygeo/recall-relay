@@ -1,0 +1,13 @@
+id,name,kind,open_schedule,same_day_distribution,languages,contact_name,contact_email,contact_phone,city
+nueva-vida,Iglesia Nueva Vida Food Pantry,church pantry,Wednesdays 9-1,false,es|en,Marisol Delgado,nueva-vida@example.org,305-555-0101,Homestead
+redland-kitchen,Redland Community Kitchen,soup kitchen,"Mon-Fri 11-2, hot meals served on site",true,en|es,Darnell Foster,redland-kitchen@example.org,305-555-0102,Homestead
+cutler-bay-baptist,Cutler Bay Baptist Food Ministry,church pantry,"first Saturday monthly, 8-11",false,en,Gwendolyn Pike,cutler-bay-baptist@example.org,305-555-0103,Cutler Bay
+naranja-esperanza,Centro Esperanza Naranja,church pantry,Tue/Thu 9-12,false,es|ht|en,Ana Lucia Restrepo,naranja-esperanza@example.org,305-555-0104,Naranja
+florida-city-shelter,Florida City Family Shelter,shelter,"daily 7-7, residents only",true,en|es|ht,Yvette Pierre-Louis,florida-city-shelter@example.org,305-555-0105,Florida City
+goulds-mobile,Goulds Mobile Pantry Route 3,mobile pantry,"second and fourth Friday, 10-1, curbside",true,en|es,Terrance Bell,goulds-mobile@example.org,305-555-0106,Goulds
+perrine-senior,Perrine Senior Center Pantry,senior center,Mon/Wed 10-12,false,en|es,Beverly Simmons,perrine-senior@example.org,305-555-0107,Perrine
+leisure-city-school,Leisure City Elementary School Pantry,school pantry,Thursdays 2-5 during the school year,false,es|en,Dianne Okafor,leisure-city-school@example.org,305-555-0108,Leisure City
+princeton-methodist,Princeton United Methodist Food Closet,church pantry,"first and third Saturday, 9-11",false,en,Roy Kittrell,princeton-methodist@example.org,305-555-0109,Princeton
+palmetto-bay-community,Palmetto Bay Community Pantry,community pantry,Tuesdays 4-7,false,en|es,Priya Raghunathan,palmetto-bay-community@example.org,305-555-0110,Palmetto Bay
+richmond-heights-ame,Richmond Heights AME Food Pantry,church pantry,"biweekly Saturday, 8-11",false,en|ht,Carla Whitfield,richmond-heights-ame@example.org,305-555-0111,Richmond Heights
+homestead-bethel,Eglise Bethel Homestead Pantry,church pantry,"Sundays after service, 12-3",false,ht|en,Jean-Baptiste Moise,homestead-bethel@example.org,305-555-0112,Homestead

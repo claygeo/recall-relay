@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "disclaimer": "Do not rely on openFDA to make decisions regarding medical care. While we make every effort to ensure that data is accurate, you should assume all results are unvalidated. We may limit or otherwise restrict your access to the API in line with our Terms of Service.",
+    "terms": "https://open.fda.gov/terms/",
+    "license": "https://open.fda.gov/license/",
+    "last_updated": "2026-09-02",
+    "results": {
+      "skip": 0,
+      "limit": 1,
+      "total": 1
+    }
+  },
+  "results": [
+    {
+      "status": "Ongoing",
+      "city": "San Carlos",
+      "state": "",
+      "country": "Chile",
+      "classification": "Class I",
+      "openfda": {},
+      "product_type": "Food",
+      "event_id": "99373",
+      "recalling_firm": "Frutas y Hortalizas del Sur S.A.",
+      "address_1": "Ruta 5 Sur Km. 390",
+      "address_2": "",
+      "postal_code": "N/A",
+      "voluntary_mandated": "Voluntary: Firm initiated",
+      "initial_firm_notification": "Two or more of the following: Email, Fax, Letter, Press Release, Telephone, Visit",
+      "distribution_pattern": "FL",
+      "recall_number": "H-1181-2026",
+      "product_description": "Organic Whole Blueberries, Net Wt 10 oz (284g) plastic bag, packed in 8 bags per case of 10 oz each. Keep Frozen",
+      "product_quantity": "3640 cases",
+      "reason_for_recall": "Potential E. coli O145:H28 Contamination",
+      "recall_initiation_date": "20260703",
+      "center_classification_date": "20260721",
+      "report_date": "20260722",
+      "code_info": "Lot 6040 01 Best by Date Feb 09 2028",
+      "more_code_info": ""
+    }
+  ]
+}

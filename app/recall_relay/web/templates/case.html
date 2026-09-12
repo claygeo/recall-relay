@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}{{ case.id }} · Recall Relay{% endblock %}
+
+{% block content %}
+
+{# ------------------------------------------------------------ the one decision #}
+<section class="sheet">
+  <div class="decision">
+    <div class="meta">
+      <span>{{ case.id }}</span>
+      <span>·</span>
+      <span>{{ classification }}{% if class_is_assumed %} (assumed, unclassified press release){% endif %}</span>
+      {% if case.notice.recall_number %}<span>·</span><span>{{ case.notice.recall_number }}</span>{% endif %}
+      <span>·</span>
+      <span class="tag t-{{ status_tone }}"><span class="dot"></span>{{ status_label }}</span>
+      {% if case.is_drill %}<span class="tag tag--drill">Drill</span>{% endif %}
+    </div>
+
+    <h1>{{ headline }}</h1>
+
+    {% if ping %}
+    <p class="ping">{{ ping }}</p>
+    {% else %}
+    <p class="ping muted">{{ case.notice.reason or "No ping drafted for this case." }}</p>
+    {% endif %}
+
+    {% if can_approve %}
+    <div class="btn-row no-print">
+      <button class="btn btn--approve" data-post="/api/cases/{{ case.id }}/approve"
+              data-confirm="Send {{ case.notices|length }} agency notice(s) now?">Approve and send</button>
+      <form method="post" action="/api/cases/{{ case.id }}/dismiss" class="btn-row" style="gap: 8px;">
+        <input type="text" name="reason" required placeholder="Reason for not sending" style="width: 280px;">
+        <button class="btn btn--secondary" type="submit">Dismiss</button>
+      </form>
+    </div>
+    <p class="caption" style="margin-top: 12px;">This is the only decision this case asks of you.</p>
+    {% elif case.status.value == "dismissed" %}
+    <p class="note">Dismissed{% if case.dismissed_reason %}: {{ case.dismissed_reason }}{% endif %}</p>
+    {% elif case.approved_at %}
+    <p class="note note--accent">Approved {{ case.approved_at|stamp }} · {{ notices_sent_count }} notice(s) relayed.</p>
+    {% endif %}
+  </div>
+</section>
+
+{# ------------------------------------------------------------ needs human #}
+{% if can_resolve %}
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="eyebrow">Needs human</span>
+    <h2>Answer the ambiguity</h2>
+    <div class="caption">Your answer is remembered. The next recall that surfaces the same row reads it verbatim and does not ask again.</div>
+  </div>
+  {% if case.verdict %}
+  <p class="note note--accent" style="margin-bottom: 24px;">{{ case.verdict.reason }}</p>
+  {% if case.verdict.evidence %}
+  <ul class="log" style="max-height: none; margin-bottom: 24px;">
+    {% for line in case.verdict.evidence %}<li>{{ line }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% endif %}
+  <form method="post" action="/api/cases/{{ case.id }}/resolve">
+    <label class="field">
+      <span>What is true? (this becomes a permanent coordinator decision)</span>
+      <input type="text" name="decision_text" required
+             placeholder="e.g. receipt 34 is Publix store-brand blueberries, not the recalled Great Value line">
+    </label>
+    <fieldset style="margin-bottom: 16px;">
+      <span class="eyebrow">Treat as</span>
+      <div class="radio-row"><input type="radio" id="ta-match" name="treat_as" value="MATCH" checked><label for="ta-match">MATCH — this ledger row is affected</label></div>
+      <div class="radio-row"><input type="radio" id="ta-no" name="treat_as" value="NO_MATCH"><label for="ta-no">NO_MATCH — it is a different product</label></div>
+    </fieldset>
+    <button class="btn" type="submit">Record the decision</button>
+  </form>
+</section>
+{% endif %}
+
+{# ------------------------------------------------------------ pull list #}
+<section class="sheet sheet--flush">
+  <div class="sheet-head">
+    <span class="eyebrow">Pull list</span>
+    <h2>What to pull, and from where</h2>
+    {% if case.pull_list %}
+    <div class="counts">
+      On hand <b>{{ case.pull_list.on_hand_cases }}</b> ·
+      Rows <b>{{ case.pull_list.items|length }}</b> ·
+      Agencies <b>{{ case.pull_list.agencies_affected|length }}</b>
+      {% if case.pull_list.widening_applied %} · <b>widened</b> (rule 4){% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% if pull_rows %}
+  <div class="table-scroll">
+    <table class="ledger">
+      <thead>
+        <tr>
+          <th>Receipt</th>
+          <th>Where</th>
+          <th class="num">Cases</th>
+          <th>Shipped</th>
+          <th>Lot</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in pull_rows %}
+        <tr>
+          <td class="id">{{ "%04d"|format(row.item.receipt_id) }}</td>
+          <td>{% if row.on_hand %}<span class="tag tag--hold">On hand · HOLD</span>{% else %}{{ row.where }}{% endif %}</td>
+          <td class="num">{{ row.item.cases }}</td>
+          <td class="code dim">{{ row.item.shipped_at or "—" }}</td>
+          <td class="code">{{ row.item.lot or "—" }}</td>
+          <td class="dim">
+            {% if not row.item.lot_known %}no lot on the receipt: whole line treated as affected{% endif %}
+            {% if row.item.physical_sort_required %}{% if not row.item.lot_known %} · {% endif %}<b>physical sort required</b>{% endif %}
+            {% if row.item.note %}{% if not row.item.lot_known or row.item.physical_sort_required %} · {% endif %}{{ row.item.note }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if case.pull_list and case.pull_list.summary %}
+  <div class="sheet-body"><p class="note" style="margin-top: 16px;">{{ case.pull_list.summary }}</p></div>
+  {% endif %}
+  {% else %}
+  <div class="sheet-body"><p class="empty">No pull list on this case.</p></div>
+  {% endif %}
+</section>
+
+{# ------------------------------------------------------------ agency grid #}
+{% if agency_rows %}
+<section class="sheet sheet--flush">
+  <div class="sheet-head">
+    <span class="eyebrow">Partner agencies</span>
+    <h2>Who has it, and who has answered</h2>
+    <div class="counts">Notified <b>{{ agency_rows|length }}</b> · Responded <b>{{ responded_count }}</b> · Outstanding <b>{{ agency_rows|length - responded_count }}</b></div>
+  </div>
+  <div class="table-scroll">
+    <table class="ledger">
+      <thead>
+        <tr>
+          <th>Agency</th>
+          <th class="num">Cases</th>
+          <th>Shipped</th>
+          <th>Status</th>
+          <th>Last response</th>
+          <th>Next follow-up</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in agency_rows %}
+        <tr>
+          <td>
+            <a href="/inbox/{{ row.agency_id }}">{{ row.name }}</a>
+            {% if row.same_day %}<span class="tag t-warn"><span class="dot"></span>Same day</span>{% endif %}
+          </td>
+          <td class="num">{{ row.cases }}</td>
+          <td class="code dim">{{ row.shipped or "—" }}</td>
+          <td>
+            {% if row.response %}
+            <span class="tag t-{{ row.response_tone }}"><span class="dot"></span>{{ row.response_label }}</span>
+            {% else %}
+            <span class="tag t-muted"><span class="dot"></span>Awaiting</span>
+            {% endif %}
+          </td>
+          <td class="dim">
+            {% if row.response %}
+              {{ row.responded_at }}{% if row.response.count is not none %} · {{ row.response.count }} cases{% endif %}
+              {% if row.response.free_text %}<br><span class="caption">{{ row.response.free_text }}</span>{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td class="code dim">{% if row.next_followup %}{{ row.next_followup_due }} · {{ row.next_followup_kind }}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="sheet-body"><p class="caption" style="margin-top: 16px;">Nobody is marked confirmed by silence. An agency that never answers escalates to a call script for you.</p></div>
+</section>
+{% endif %}
+
+{# ------------------------------------------------------------ drafted notices #}
+{% if case.notices %}
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="eyebrow">Drafted notices</span>
+    <h2>What each agency receives</h2>
+    <div class="caption">Every notice cites the recall number and the source. Nothing here was invented by the writer.</div>
+  </div>
+  {% for notice in case.notices %}
+  <article class="paper">
+    <div class="paper-header">
+      Recall <b>{{ notice.recall_number or "pending" }}</b> ·
+      Class <b>{{ notice.classification }}</b> ·
+      To <b>{{ notice.agency_id }}</b><br>
+      Product <b>{{ notice.product }}</b><br>
+      Lots <b>{{ notice.lots|join(", ") if notice.lots else "not stated" }}</b> ·
+      Best by <b>{{ notice.best_by|join(", ") if notice.best_by else "not stated" }}</b> ·
+      Cases shipped <b>{{ notice.cases_shipped }}</b>
+      {%- if notice.shipped_dates %} on <b>{{ notice.shipped_dates|join(", ") }}</b>{% endif %}
+    </div>
+    <h3 class="paper-subject">{{ notice.subject }}</h3>
+    <div class="paper-body">{{ notice.body }}</div>
+    <div class="mail-actions">
+      <span class="eyebrow">How to reply (pick one)</span>
+      <ul>
+        {% for action in notice.actions %}<li>{{ action.label }}</li>{% endfor %}
+      </ul>
+    </div>
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+{# ------------------------------------------------------------ shelf signs #}
+{% if signs_by_lang %}
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="eyebrow">Client shelf signs</span>
+    <h2>What a client reads at the pantry</h2>
+    <div class="caption">Drafted in every language the affected agencies serve. Printed and taped to the shelf.</div>
+  </div>
+  <div class="signs">
+    {% for lang in ["en", "es", "ht"] %}
+    {% if signs_by_lang.get(lang) %}
+    {% set sign = signs_by_lang[lang][0] %}
+    <article class="paper">
+      <div class="sign-lang">{{ {"en": "English", "es": "Español", "ht": "Kreyòl Ayisyen"}[lang] }} · {{ signs_by_lang[lang]|length }} agency</div>
+      <h3 class="sign-title">{{ sign.title }}</h3>
+      <p class="sign-line"><b>{{ sign.product_line }}</b></p>
+      <p class="sign-line">{{ sign.what_to_do }}</p>
+      <p class="sign-line">{{ sign.symptoms }}</p>
+      <p class="sign-line muted">{{ sign.agency_contact }}</p>
+      <p class="foot-source">{{ sign.source_url or case.notice.source_url }}</p>
+    </article>
+    {% endif %}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{# ------------------------------------------------------------ controls #}
+<section class="sheet no-print">
+  <div class="sheet-head">
+    <span class="eyebrow">Demo controls</span>
+    <h2>Move the clock, chase the silence, file the packet</h2>
+    <div class="caption">Follow-up cadence for {{ classification }} is encoded in rules.py, not in a prompt.</div>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn--quiet" data-post="/api/clock/advance" data-payload='{"hours": 24}'>Advance demo clock +24h</button>
+    <span class="caption">Demo clock {% if clock_offset %}+{{ clock_offset }}h{% else %}at real time{% endif %}</span>
+    <button class="btn btn--quiet" data-post="/api/followups/run">Run follow-ups now</button>
+    {% if can_close %}
+    <button class="btn" data-post="/api/cases/{{ case.id }}/close" data-confirm="Close this case and file the audit packet?">Close case</button>
+    {% endif %}
+    <a class="btn btn--secondary" href="/cases/{{ case.id }}/packet">Audit packet</a>
+    <a class="btn btn--secondary" href="/cases/{{ case.id }}/packet.pdf">Packet PDF</a>
+  </div>
+</section>
+
+{# ------------------------------------------------------------ provenance #}
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="eyebrow">Provenance</span>
+    <h2>Where this came from</h2>
+  </div>
+  <dl class="kv">
+    <dt>Source</dt>
+    <dd>{{ case.notice.source.value|replace("_", " ") }} · seen {{ case.notice.source_seen_at|stamp }}</dd>
+    <dt>Firm</dt>
+    <dd>{{ case.notice.firm }}</dd>
+    <dt>Reason</dt>
+    <dd>{{ case.notice.reason }}</dd>
+    <dt>Distribution</dt>
+    <dd>{{ case.notice.distribution_text or (case.notice.distribution_states|join(", ") if case.notice.distribution_states else "not stated") }}</dd>
+    <dt>Disposition, verbatim</dt>
+    <dd>{{ case.notice.disposition_verbatim or "not stated in the notice" }}</dd>
+    {% if case.enrichment %}
+    <dt>openFDA enrichment</dt>
+    <dd>
+      {{ case.enrichment.recall_number }}
+      {%- if case.enrichment.classification %} · {{ case.enrichment.classification.value }}{% endif %}
+      {%- if case.enrichment.status %} · {{ case.enrichment.status }}{% endif %}
+      {%- if case.enrichment.report_date %} · reported {{ case.enrichment.report_date }}{% endif %}
+      {% if case.enrichment.code_info %}<br><span class="caption">{{ case.enrichment.code_info }}</span>{% endif %}
+    </dd>
+    {% endif %}
+    <dt>Link</dt>
+    <dd class="foot-source">
+      {% if case.notice.source_url %}<a href="{{ case.notice.source_url }}" rel="noopener noreferrer nofollow" target="_blank">{{ case.notice.source_url }}</a>{% else %}pasted without a URL{% endif %}
+    </dd>
+  </dl>
+</section>
+{% endblock %}

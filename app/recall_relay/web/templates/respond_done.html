@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Recorded · Recall Relay{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Thank you, recorded</h1>
+  <div class="sub">Your answer closes {{ agency.name if agency else "your pantry" }}'s line on this recall. No reminders will chase you.</div>
+</div>
+
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="eyebrow">Recall {{ case.notice.recall_number or "pending" }} · {{ case.id }}</span>
+    <h2>{{ headline }}</h2>
+  </div>
+  <dl class="kv">
+    <dt>You answered</dt>
+    <dd>{{ label }}{% if count is not none %} · {{ count }} cases{% endif %}</dd>
+    {% if free_text %}
+    <dt>You added</dt>
+    <dd>{{ free_text }}</dd>
+    {% endif %}
+    <dt>Recorded at</dt>
+    <dd>{{ recorded_at }}</dd>
+  </dl>
+  {% if sign_sent %}
+  <p class="note note--accent" style="margin-top: 24px;">
+    Because this product already reached clients, the shelf signs for your pantry have been sent to you in every
+    language you serve. Print them and tape them to the shelf.
+  </p>
+  {% endif %}
+  <p class="caption" style="margin-top: 24px;">
+    <a href="/inbox/{{ agency.id if agency else '' }}">See everything sent to you →</a>
+  </p>
+</section>
+{% endblock %}

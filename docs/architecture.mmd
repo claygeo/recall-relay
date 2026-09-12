@@ -1,0 +1,57 @@
+flowchart LR
+  subgraph Sources["Recall sources (keyless, public)"]
+    S1["Forwarded alert / pasted URL / PDF\n(the notice the food bank already gets)"]
+    S2["FDA press-release RSS\n(same day) + press page"]
+    S3["openFDA enforcement\n(weekly, enrichment only)"]
+  end
+
+  subgraph Intake["Deterministic intake (no model)"]
+    I1["fetch_url\nbrowser UA, cache, abuse-wall detect"]
+    I2["parse_fda_press_page / parse_text\nUPCs as printed, lots, best-by,\nstates, disposition verbatim"]
+    I3["to_recall_notice\nconfidence < 0.8 -> Extractor agent"]
+  end
+
+  subgraph Strands["Strands Agents (orchestrator + agents-as-tools)"]
+    O["Orchestrator Agent\n@tool functions run the procedure"]
+    T1["score_candidates\nrules 3/4/7/8, rapidfuzz, top-k only"]
+    M["Matcher agent-as-tool\nstructured_output: MatchVerdict\nMATCH / NO_MATCH / NEEDS_HUMAN"]
+    W["Notice writer agent-as-tool\nstructured_output: AgencyNotice, ClientSign\n(disposition copied verbatim)"]
+    H["Hooks\nAuditHook: audit row per tool call\nApprovalGuard: cancel send_notices\nunless approved_at"]
+  end
+
+  subgraph Register["System of record (FastAPI + SQLite)"]
+    L["Receiving ledger\n+ distribution log"]
+    C["Recall case register\nverdicts, pull list, HOLD tags,\nnotices, responses, follow-ups, audit"]
+    D["Coordinator decisions\n(remembered, rule 14)"]
+  end
+
+  subgraph People["The people"]
+    K["Coordinator\nONE decision per case:\nSend?"]
+    A["Partner pantries\n(12 agencies, volunteer-run)\none-click: pulled / never received /\nalready distributed / need pickup"]
+    P["Households\nshelf sign EN / ES / HT"]
+  end
+
+  subgraph AWS["AWS"]
+    R["Amazon Bedrock AgentCore Runtime\nCodeZip deploy, stateless\ncalls the register over REST"]
+    B["Amazon Bedrock\nClaude (Sonnet) via Strands BedrockModel"]
+  end
+
+  S1 --> I1
+  S2 --> I1
+  I1 --> I2 --> I3 --> O
+  S3 -. enrich .-> C
+  O --> T1 --> M
+  O --> W
+  H -. guards .- O
+  L --> T1
+  M --> C
+  W --> C
+  D --> M
+  C --> K
+  K -- approve --> C
+  C -- notices + follow-ups --> A
+  A -- responses --> C
+  A -- already distributed --> P
+  C --> X["Audit packet\n(PDF, on close)"]
+  R --- O
+  B --- O

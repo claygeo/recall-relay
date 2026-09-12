@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ headline }} · Recall Relay{% endblock %}
+
+{% block content %}
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="eyebrow">{{ eyebrow or "Notice" }}</span>
+    <h2>{{ headline }}</h2>
+  </div>
+  <p class="lead" style="max-width: 62ch;">{{ message }}</p>
+  {% if links %}
+  <div class="btn-row" style="margin-top: 24px;">
+    {% for link in links %}<a class="btn btn--secondary" href="{{ link.href }}">{{ link.label }}</a>{% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

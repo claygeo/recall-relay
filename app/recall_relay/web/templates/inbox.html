@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{% if selected %}{{ selected.name }} · Inbox{% else %}Agency inbox{% endif %} · Recall Relay{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{% if selected %}{{ selected.name }}{% else %}Agency inbox{% endif %}</h1>
+  <div class="sub">
+    The partner-agency side of the relay. Every message the system sends is mirrored here, whatever the mail backend is —
+    so the loop is visible without an email account.
+  </div>
+</div>
+
+<section class="sheet sheet--flush">
+  <div class="sheet-head">
+    <span class="eyebrow">Inbox mirror{% if selected %} · {{ selected.contact_email }}{% endif %}</span>
+    <h2>{% if selected %}Messages to {{ selected.name }}{% else %}All messages sent{% endif %}</h2>
+    <div class="counts">Messages <b>{{ rows|length }}</b>{% if not selected %} of <b>{{ total }}</b>{% endif %}</div>
+  </div>
+
+  <div class="sheet-body">
+    <nav class="rail">
+      <a href="/inbox" {% if not selected_id %}aria-current="page"{% endif %}>All <span class="n">{{ total }}</span></a>
+      {% for a in agencies %}
+      <a href="/inbox/{{ a.id }}" {% if selected_id == a.id %}aria-current="page"{% endif %}>{{ a.name }} <span class="n">{{ counts.get(a.id, 0) }}</span></a>
+      {% endfor %}
+    </nav>
+
+    {% for row in rows %}
+    {% set m = row.mail %}
+    <article class="mail">
+      <div class="mail-head">
+        <span>To {{ m.to_addr }}</span>
+        <span>·</span>
+        <span>{{ m.kind }}</span>
+        <span>·</span>
+        <span>{{ row.sent }}</span>
+        <span>·</span>
+        <span><a href="/cases/{{ m.case_id }}">{{ m.case_id }}</a></span>
+        {% if m.backend and m.backend != "mirror" %}<span>·</span><span>{{ m.backend }}</span>{% endif %}
+      </div>
+      <h3 class="mail-subject">{{ m.subject }}</h3>
+      <div class="mail-body">{{ m.body }}</div>
+      {% if m.token %}
+      <div class="mail-actions">
+        <span class="eyebrow">One-click reply</span>
+        <ul>
+          {% for option in response_options %}
+          <li><a href="/r/{{ signed_tokens[m.token] }}?status={{ option.status.value }}">{{ option.label }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </article>
+    {% else %}
+    <p class="empty">Nothing has been sent yet. Approve a case and the notices land here.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

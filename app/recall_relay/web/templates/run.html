@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Run · Recall Relay{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Daily scan</h1>
+  <div class="sub">Walk the FDA recall feed, score every notice against the receiving ledger, and stop at the one decision a human owes.</div>
+</div>
+
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="eyebrow">Scan</span>
+    <h2>Run daily scan</h2>
+    <div class="caption">Feed: pinned snapshot 2026-09-11 + live · non-food is skipped · a recall that never touched this ledger is dismissed silently</div>
+  </div>
+
+  <div class="btn-row" style="margin-bottom: 24px;">
+    <button class="btn" id="run-scan" {% if active_job %}aria-disabled="true"{% endif %}>Run daily scan</button>
+    <span class="caption"><span class="livedot" id="livedot"></span><span id="livelabel">idle</span></span>
+    <span class="caption">· {{ budget_used }}/{{ budget_limit }} agent runs used today</span>
+  </div>
+
+  <div class="cols">
+    <div>
+      <span class="eyebrow">Tally</span>
+      <div class="tally" style="margin-top: 16px;">
+        <div><div class="fig zero" id="t-seen">0</div><div class="cap">scanned</div></div>
+        <div><div class="fig zero" id="t-skipped_non_food">0</div><div class="cap">skipped, non-food</div></div>
+        <div><div class="fig zero" id="t-already_seen">0</div><div class="cap">already seen</div></div>
+        <div><div class="fig zero" id="t-dismissed">0</div><div class="cap">dismissed</div></div>
+        <div><div class="fig zero" id="t-needs_human">0</div><div class="cap">needs human</div></div>
+        <div><div class="fig zero" id="t-awaiting_approval">0</div><div class="cap">pinged</div></div>
+        <div><div class="fig zero" id="t-errors">0</div><div class="cap">errors</div></div>
+      </div>
+      <p class="note" style="margin-top: 24px;">Nothing is sent by the scan. It ends at a ping, a silent dismissal, or a question for you.</p>
+      <p id="run-cases" hidden style="margin-top: 16px;"><a href="/cases">Open the case register →</a></p>
+    </div>
+    <div>
+      <span class="eyebrow">Live log</span>
+      <ul class="log" id="log">
+        <li class="is-done">Press “Run daily scan”. Tool calls and verdicts appear here as they happen.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="eyebrow">Manual intake</span>
+    <h2>A notice arrived another way</h2>
+    <div class="caption">FSIS and USDA Foods notices do not come through the FDA feed. Paste them here.</div>
+  </div>
+
+  <form method="post" action="/api/intake" enctype="multipart/form-data">
+    <label class="field">
+      <span>FDA press-release URL</span>
+      <input type="url" name="url" placeholder="https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/...">
+    </label>
+    <label class="field">
+      <span>or paste the notice text</span>
+      <textarea name="text" placeholder="Paste the forwarded alert or the firm's letter, verbatim."></textarea>
+    </label>
+    <label class="field">
+      <span>or upload a PDF (text layer only, no OCR)</span>
+      <input type="file" name="pdf" accept="application/pdf">
+    </label>
+    <div class="btn-row">
+      <button class="btn" type="submit">Open a case</button>
+      <span class="caption">One source per submission. The case opens, the agent works it, and you land on the decision.</span>
+    </div>
+  </form>
+</section>
+{% endblock %}

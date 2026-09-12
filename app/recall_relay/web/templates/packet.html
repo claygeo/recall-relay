@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Audit packet {{ case.id }} · Recall Relay{% endblock %}
+
+{% block content %}
+<section class="sheet">
+  <div class="packet-title">
+    <span class="eyebrow">Audit packet{% if case.is_drill %} · drill{% endif %}</span>
+    <h1>{{ headline }}</h1>
+    <div class="counts">
+      Case <b>{{ case.id }}</b> ·
+      Recall <b>{{ recall_number }}</b> ·
+      Class <b>{{ classification }}</b> ·
+      Status <b>{{ status_label }}</b> ·
+      Filed <b>{{ generated_at }}</b>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>Food bank</dt><dd>{{ food_bank }}</dd>
+    <dt>Firm</dt><dd>{{ case.notice.firm }}</dd>
+    <dt>Reason</dt><dd>{{ case.notice.reason }}</dd>
+    <dt>Notice seen</dt><dd>{{ case.notice.source_seen_at|stamp }}</dd>
+    <dt>Sources</dt>
+    <dd class="foot-source">{% for s in sources %}{{ s }}{% if not loop.last %}<br>{% endif %}{% else %}pasted without a URL{% endfor %}</dd>
+    <dt>Disposition, verbatim</dt><dd>{{ disposition_verbatim or "not stated in the notice" }}</dd>
+    <dt>Notices sent</dt><dd>{{ notices_sent }}</dd>
+    <dt>Responses</dt><dd>{{ responses|length }} of {{ responses|length + outstanding|length }}{% if outstanding %} · outstanding: {{ outstanding|join(", ") }}{% endif %}</dd>
+    <dt>Elapsed, notice to full trace</dt><dd>{{ elapsed or "still open" }}</dd>
+    {% if closed_at %}<dt>Closed</dt><dd>{{ closed_at }}</dd>{% endif %}
+  </dl>
+
+  <div class="btn-row no-print" style="margin-top: 24px;">
+    <a class="btn btn--secondary" href="/cases/{{ case.id }}">Back to the case</a>
+    <a class="btn btn--secondary" href="/cases/{{ case.id }}/packet.pdf">Download PDF</a>
+  </div>
+</section>
+
+<section class="sheet sheet--flush">
+  <div class="sheet-head">
+    <span class="eyebrow">Matched ledger rows</span>
+    <h2>What the recall touched</h2>
+  </div>
+  <div class="table-scroll">
+    <table class="ledger">
+      <thead>
+        <tr><th>Receipt</th><th>Received</th><th>Donor / channel</th><th>Product</th><th>Lot</th><th class="num">Cases</th><th class="num">Shipped</th><th class="num">On hand</th></tr>
+      </thead>
+      <tbody>
+        {% for row in matched_rows %}
+        <tr>
+          <td class="id">{{ "%04d"|format(row.receipt.id) }}</td>
+          <td class="code dim">{{ row.receipt.received_at }}</td>
+          <td class="dim">{{ row.receipt.donor }}</td>
+          <td>{{ row.receipt.brand }}{% if row.receipt.brand %} {% endif %}{{ row.receipt.product }} {{ row.receipt.size }}</td>
+          <td class="code">{{ row.receipt.lot or "none on the receipt" }}</td>
+          <td class="num">{{ row.receipt.cases }}</td>
+          <td class="num">{{ row.shipped }}</td>
+          <td class="num">{{ row.on_hand }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty">No ledger row was matched to this notice.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if pull_rows %}
+<section class="sheet sheet--flush">
+  <div class="sheet-head">
+    <span class="eyebrow">Pull list</span>
+    <h2>What was pulled, and from where</h2>
+    {% if pull_list %}
+    <div class="counts">On hand <b>{{ pull_list.on_hand_cases }}</b> · Agencies <b>{{ pull_list.agencies_affected|length }}</b>{% if pull_list.widening_applied %} · <b>widened</b> (no lot on the receipt){% endif %}</div>
+    {% endif %}
+  </div>
+  <div class="table-scroll">
+    <table class="ledger">
+      <thead>
+        <tr><th>Receipt</th><th>Where</th><th class="num">Cases</th><th>Shipped</th><th>Lot</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+        {% for row in pull_rows %}
+        <tr>
+          <td class="id">{{ "%04d"|format(row.item.receipt_id) }}</td>
+          <td>{{ "on hand (HOLD)" if row.on_hand else row.where }}</td>
+          <td class="num">{{ row.item.cases }}</td>
+          <td class="code dim">{{ row.item.shipped_at or "—" }}</td>
+          <td class="code">{{ row.item.lot or "—" }}</td>
+          <td class="dim">
+            {% if not row.item.lot_known %}no lot: whole line affected{% endif %}
+            {% if row.item.physical_sort_required %} · physical sort required{% endif %}
+            {% if row.item.note %} · {{ row.item.note }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="sheet sheet--flush">
+  <div class="sheet-head">
+    <span class="eyebrow">Responses</span>
+    <h2>What each agency said</h2>
+  </div>
+  <div class="table-scroll">
+    <table class="ledger">
+      <thead><tr><th>At</th><th>Agency</th><th>Answer</th><th class="num">Cases</th><th>Their words</th></tr></thead>
+      <tbody>
+        {% for r in responses %}
+        <tr>
+          <td class="code dim">{{ r.at }}</td>
+          <td>{{ r.agency_name }}</td>
+          <td>{{ r.label }}</td>
+          <td class="num">{{ r.count if r.count is not none else "—" }}</td>
+          <td class="dim">{{ r.free_text or "—" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">No agency has answered yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if followups %}
+<section class="sheet sheet--flush">
+  <div class="sheet-head">
+    <span class="eyebrow">Follow-ups</span>
+    <h2>Every chase, scheduled and sent</h2>
+  </div>
+  <div class="table-scroll">
+    <table class="ledger">
+      <thead><tr><th>Agency</th><th>Kind</th><th>Due</th><th>Sent</th></tr></thead>
+      <tbody>
+        {% for f in followups %}
+        <tr>
+          <td>{{ f.agency_name }}</td>
+          <td class="dim">{{ f.kind }}</td>
+          <td class="code dim">{{ f.due }}</td>
+          <td class="code">{{ f.sent or "not sent" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="eyebrow">Approvals</span>
+    <h2>Who decided what</h2>
+  </div>
+  <ul class="timeline">
+    {% for a in approvals %}<li><span class="d">{{ a }}</span></li>{% endfor %}
+  </ul>
+</section>
+
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="eyebrow">Timeline</span>
+    <h2>Every event, in order</h2>
+    <div class="counts">Events <b>{{ timeline|length }}</b></div>
+  </div>
+  <ul class="timeline">
+    {% for e in timeline %}
+    <li>
+      <span class="t">{{ e.at }}</span>
+      <span class="a">{{ e.actor }}</span>
+      <span class="k">{{ e.kind }}</span>
+      <span class="d">{{ e.detail }}</span>
+    </li>
+    {% else %}
+    <li><span class="d">No events recorded.</span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}
+
+{% block demo_strip %}{% endblock %}
