@@ -13,11 +13,14 @@ Rule 6  Regulatory scope is explicit (FDA feeds only; FSIS/USDA Foods by paste, 
 Rule 7  Salvage / reclamation / repack rows have no lot lineage: physical sort required.
 Rule 8  Distribution-pattern gate: auto-dismiss only when the state is excluded AND the brand was never received.
 Rule 9  Closed agency response taxonomy.
-Rule 10 Follow-up cadence is encoded and editable; an agency is never auto-confirmed.
-Rule 11 Disposition is copied verbatim, never invented; on-hand product is HOLD, not destroyed.
-Rule 12 One human decision per case; HOLD tags are automatic because they are reversible.
+Rule 10 Follow-up cadence is encoded in one table (FOLLOWUP_CADENCE_HOURS); an agency is never auto-confirmed.
+Rule 11 Disposition is copied verbatim, never invented; on-hand product is HOLD, not destroyed, until the
+        coordinator releases the tag from the ledger.
+Rule 12 One human decision per case (an ambiguous match asks one question first); HOLD tags are automatic
+        because they can be released from the ledger.
 Rule 13 Audit packet on close.
-Rule 14 Never re-ping; remember decisions; drills are labeled and never touch real HOLD tags.
+Rule 14 Never re-ping: a recall already seen is skipped and an openFDA record for an existing case only
+        enriches it; coordinator decisions are remembered and handed to the Matcher on later runs.
 Rule 15 Client-facing notice on Class I or on an "already distributed" response.
 """
 from __future__ import annotations
