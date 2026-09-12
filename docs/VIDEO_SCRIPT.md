@@ -1,53 +1,18 @@
-# Recall Relay, video bullets (read these; the screen does the talking)
+# Recall Relay, the 75-second video
 
-Target 4:30. Screen recording of the live app, one take per section, trim after. Voice: plain, unhurried. Say the numbers on screen, not numbers from memory.
+Method: record the screen first with every click already in it, then read the lines over the playback in one sitting. Never narrate while clicking. Pause a full second at every period. 165 words at a calm pace lands at 70 to 80 seconds. Upload to YouTube as public.
 
-## 0:00 Problem (screen: the real FDA press page for Great Value Organic Triple Berry Blend)
-- This is a real recall. September 2. Great Value frozen berries, one lot, E. coli, sold at Walmart in 27 states including Florida.
-- I live in Cutler Bay, south of Miami. Walmart retail rescue is how a lot of frozen food reaches the pantries near me. Some of them open once a month.
-- Feeding America already emails every food bank when this happens. That part works.
-- What happens next is one person, a spreadsheet, and 50 to 500 partner pantries. Nobody reaches the family that already took the bag home.
+Before recording: reset the demo, do one full dry run on https://recall-relay.onrender.com (the daily agent budget is small, so do not burn runs), and make sure the shelf sign actually renders on screen when you click "Already distributed".
 
-## 0:30 Who it's for (screen: Ledger tab, scroll slowly)
-- Recall Relay is for the coordinator at a food bank and the volunteer pantries downstream of them.
-- This is the receiving ledger. Sixty rows. Store brands, blank UPCs, lots on about a third of the rows. This is what real intake looks like.
-- Receipt 17: thirty cases of those berries, received August 24. No lot code on the receipt. Twenty-two cases already went out to three pantries.
-- One of those shipments went out September 4. Two days after the press release. Because nobody cross-checked. That is the whole problem.
+| Screen | Say |
+|---|---|
+| The real FDA press page, scrolled to the "27 states" line | A real recall, September 2. Great Value frozen berries, E. coli, Walmart in 27 states including Florida. I live in Cutler Bay. Walmart retail rescue stocks the pantries near me. |
+| Ledger tab, cursor on receipt 17, then the September 4 shipment row | The recall email reaches the food bank. Then it's one coordinator, a spreadsheet, and pantries that open once a month. In this seeded ledger, thirty cases arrived with no lot code, so every case is suspect. One shipment left two days after the press release. |
+| Run tab, scan streaming, dismissals scrolling, one case surfacing | Recall Relay runs the procedure. It checks the FDA feed against the ledger, dismisses everything that never touched it, and stops at the one decision a human owes. |
+| Case page, click Approve as the word lands, then hold one second | One decision. Approve. |
+| Inbox: click "Already distributed", let the three-language sign render, then show the reminder and the call script | Every pantry gets one-click replies. Already distributed prints a shelf sign in English, Spanish, and Haitian Creole for the next family through the door. Silence gets a reminder, then a call script. Nothing is confirmed on its own. |
+| Close the case, audit packet PDF open, scroll one page | It closes with the audit packet. |
+| `app/recall_relay/agents/hooks.py`, the cancel branch highlighted | Built on Strands, packaged for Bedrock AgentCore. A hook cancels the send tool unless a human approved. Code, not a prompt. |
+| README header with the live link | Every recall, every pantry, with proof. |
 
-## 1:00 The run (screen: Run tab, click Run daily scan, let it stream)
-- Every morning it walks the FDA feed and the weekly openFDA ledger and scores every notice against the ledger.
-- Watch the tally. Most recalls are dismissed with a reason. Non-food is skipped. Nothing pings a human.
-- The Matcher is a Strands agent with a typed verdict: match, no match, or needs a human. It only ever sees the top candidates, never the raw ledger.
-- Same brand, different product: no match. Same product, different size: no match. An unbranded blueberry receipt against the same firm's July recall: needs a human. That one waits for me.
-- One case is ready for a decision.
-
-## 1:45 The one decision (screen: the case page, read the ping)
-- This is the entire human workload. Read it off the card.
-- No lot on the receipt, so all thirty cases are treated as affected. Eight on hand, already on hold. Twenty-two shipped to three pantries. One of them distributes the same day it receives.
-- Pull list, three notices, three shelf signs, all drafted. The disposition line is copied word for word from the FDA notice. The agent is not allowed to invent it.
-- Click Approve.
-
-## 2:20 The relay (screen: Inbox tab)
-- This is what the pantries see. Every message the system sends is mirrored here.
-- Each notice has the recall number, the product, the lot, the reason, what to do, and four one-click replies.
-- Click "We pulled it" on the first pantry. Enter six. Back on the case, the grid flips.
-- Click "Already distributed" on the same-day pantry. That triggers the shelf sign, in English, Spanish, and Haitian Creole. That sign is the hop nobody serves: the household that already took the box home.
-
-## 3:00 The chase (screen: case page, demo clock)
-- The third pantry hasn't answered. Advance the demo clock 24 hours and run follow-ups: a reminder goes out.
-- Advance to 48 hours: the coordinator gets an escalation with the pantry's phone number and a call script.
-- It never marks a pantry confirmed on its own. Silence is not a yes.
-
-## 3:30 Close, audit, memory (screen: close case, open the packet)
-- Close the case. This is the audit packet: source, matched rows, pull list, every send and reply with timestamps, the approval, and the elapsed time. This is what the auditor asks for.
-- Back on the blueberry case: tell it that row was Driscoll's, not the recalled firm. Run again. It doesn't ask twice.
-
-## 4:00 How it's built (screen: architecture diagram, then hooks.py)
-- Strands Agents: one orchestrator with tools, two agents-as-tools with structured outputs, hooks.
-- This file is the part I want you to see. Twelve lines. If a case has no approval timestamp, the send tool is cancelled before it runs. A prompt can be talked out of a rule. A hook can't.
-- Deployed on Amazon Bedrock AgentCore Runtime with the CodeZip build, no container. The dashboard is the system of record; the runtime is stateless and calls it over an authenticated API.
-- Honesty: the FDA data is live, the food bank is seeded and says so on screen. openFDA lags a median of 33 days, so the press feed leads. Meat and poultry recalls come in by paste. All of it is in the README.
-
-## 4:25 Close (screen: README top)
-- Drop in your receiving and distribution CSVs. Every recall, every pantry, with proof.
-- Repo, live link, Apache license. Thanks.
+If the AgentCore Runtime is deployed before you record, line seven becomes "deployed on Bedrock AgentCore". Otherwise keep "packaged for". Do not say "every morning" or "live from the FDA" anywhere; the scan is a button that merges a pinned feed snapshot with the live feed.
