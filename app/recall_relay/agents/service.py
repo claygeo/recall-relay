@@ -24,7 +24,6 @@ import inspect
 import json
 import re
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Literal, Optional
 
@@ -48,15 +47,17 @@ from ..core.models import (
 from ..core.store import Store
 from . import writer as writer_mod
 from .extractor import extract_notice, needs_extraction
+from .mailer import get_mailer, send_and_record
 from .matcher import adjudicate
 from .orchestrator import (
     build_orchestrator,
     compute_pull_list,
     draft_all,
-    ping_text as _ping_text,
     relay_notices,
 )
-from .mailer import get_mailer, send_and_record
+from .orchestrator import (
+    ping_text as _ping_text,
+)
 
 SNAPSHOT_RSS = "rss/recalls-2026-09-11.xml"  # relative to settings.fixtures_dir
 SNAPSHOT_OPENFDA = "openfda"  # every pinned enforcement payload in this directory
@@ -86,28 +87,6 @@ def _norm_link(url: str) -> str:
     u = (url or "").strip()
     u = re.sub(r"^https?://", "", u, flags=re.I)
     return u.rstrip("/").lower()
-
-
-@lru_cache(maxsize=1)
-def _press_fixture_index() -> dict[str, str]:
-    """Map canonical URL -> fixture path for the cached FDA press pages.
-
-    The pinned snapshot exists so the demo reproduces on camera (DECISIONS #6); serving its press pages
-    from disk means a fetch failure cannot sink the run.
-    """
-    index: dict[str, str] = {}
-    press_dir = Path(settings.fixtures_dir) / "press"
-    if not press_dir.exists():
-        return index
-    for path in sorted(press_dir.glob("*.html")):
-        try:
-            html = path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:  # pragma: no cover - unreadable fixture
-            continue
-        m = re.search(r'rel="canonical"\s+href="([^"]+)"', html)
-        if m:
-            index[_norm_link(m.group(1))] = str(path)
-    return index
 
 
 def parse_rss_file(path: Path | str) -> list[intake.RssItem]:
@@ -511,7 +490,7 @@ async def scan(
             continue
 
         try:
-            html, origin, blocked = _fetch_press(item.link)
+            html, origin, blocked = _fetch_press(item.link, store=store)
             yield {"type": "fetch", "link": item.link, "origin": origin, "blocked": blocked}
             if blocked or not html:
                 tally["errors"] += 1
@@ -646,16 +625,31 @@ async def scan(
     yield {"type": "done", "tally": tally}
 
 
-def _fetch_press(url: str) -> tuple[str, str, bool]:
-    """Fixture first, network second. Returns (html, origin, blocked).
+def _fetch_press(url: str, *, store: Optional[Store] = None) -> tuple[str, str, bool]:
+    """Committed fixture first, network second, fixture again if the network fails.
 
-    Fetched pages are cached under `settings.cache_dir`, never under `data/fixtures` -- the fixture
-    directory is committed and its contents are counted by tests, so a scan must not write into it.
+    The pinned press pages are served from `data/fixtures/press/index.json` without touching the network,
+    so the demo reproduces on camera (DECISIONS #6) and fda.gov's abuse wall cannot sink it mid-judging.
+    Anything not pinned is fetched live and cached under `settings.cache_dir` -- never under
+    `data/fixtures`, which is committed and whose contents tests count.
+
+    Returns (html, origin, blocked).
     """
-    fixture = _press_fixture_index().get(_norm_link(url))
+    fixture = intake.fixture_for_url(url)
     if fixture:
-        return Path(fixture).read_text(encoding="utf-8", errors="ignore"), "fixture", False
+        return fixture, "fixture", False
+
     result = intake.fetch_url(url, cache_dir=Path(settings.cache_dir) / "press")
+    if result.blocked or result.status != 200 or not result.text:
+        fallback = intake.fixture_for_url(url)
+        if fallback:
+            if store is not None:
+                store.audit(
+                    "scan", "system", "fetch_fallback",
+                    f"served from committed fixture after a failed fetch "
+                    f"(status={result.status}, blocked={result.blocked}): {url}",
+                )
+            return fallback, "fixture-fallback", False
     return result.text, ("cache" if result.from_cache else "network"), bool(result.blocked)
 
 
@@ -736,7 +730,7 @@ async def process_notice(
 # ---------------------------------------------------------------------------
 async def intake_url(store: Store, url: str, *, event_sink: EventSink = None) -> RecallCase:
     """A coordinator pasted a link."""
-    html, origin, blocked = _fetch_press(url)
+    html, origin, blocked = _fetch_press(url, store=store)
     if blocked or not html:
         raise RuntimeError(f"could not fetch {url} (origin={origin}, blocked={blocked})")
     raw = intake.parse_fda_press_page(html, url)
@@ -1188,6 +1182,7 @@ __all__ = [
     "build_call_script",
     "close_case",
     "dismiss",
+    "find_same_recall_case",
     "get_mailer",
     "intake_pdf",
     "intake_text",
@@ -1197,7 +1192,6 @@ __all__ = [
     "notice_from_raw",
     "openfda_snapshot_records",
     "outstanding_agencies",
-    "find_same_recall_case",
     "parse_rss_file",
     "ping_text",
     "process_notice",

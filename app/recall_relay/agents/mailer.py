@@ -27,7 +27,7 @@ class MirrorMailer:
 
     name = "mirror"
 
-    def send(self, to: str, subject: str, body: str) -> str:  # noqa: ARG002 - signature is the contract
+    def send(self, to: str, subject: str, body: str) -> str:
         return "mirror"
 
 

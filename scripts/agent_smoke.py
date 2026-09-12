@@ -30,16 +30,16 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-from recall_relay.agents import orchestrator as orch  # noqa: E402
-from recall_relay.agents import service  # noqa: E402
-from recall_relay.agents.matcher import build_matcher_agent  # noqa: E402
-from recall_relay.agents.model_factory import model_id_for  # noqa: E402
-from recall_relay.agents.writer import build_sign_agent, build_writer_agent  # noqa: E402
-from recall_relay.core import intake  # noqa: E402
-from recall_relay.core.config import settings  # noqa: E402
-from recall_relay.core.models import CaseStatus, RecallCase, Source  # noqa: E402
-from recall_relay.core.seed import load_seed  # noqa: E402
-from recall_relay.core.store import Store  # noqa: E402
+from recall_relay.agents import orchestrator as orch
+from recall_relay.agents import service
+from recall_relay.agents.matcher import build_matcher_agent
+from recall_relay.agents.model_factory import model_id_for
+from recall_relay.agents.writer import build_sign_agent, build_writer_agent
+from recall_relay.core import intake
+from recall_relay.core.config import settings
+from recall_relay.core.models import CaseStatus, RecallCase, Source
+from recall_relay.core.seed import load_seed
+from recall_relay.core.store import Store
 
 DB_PATH = ROOT / "data" / "runtime" / "agent_smoke.db"
 HERO_FIXTURE = ROOT / "data" / "fixtures" / "press" / "hero-great-value-triple-berry.html"

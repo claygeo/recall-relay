@@ -22,14 +22,12 @@ from typing import Any
 
 import pytest
 from rapidfuzz import fuzz
-from strands.models.model import Model
-
 from recall_relay.agents import matcher as matcher_mod
 from recall_relay.agents import orchestrator as orch
-from recall_relay.agents import service, writer as writer_mod
+from recall_relay.agents import service
+from recall_relay.agents import writer as writer_mod
 from recall_relay.agents.hooks import ApprovalGuard, AuditHook, TerminalToolGuard
 from recall_relay.core import rules
-from recall_relay.core.seed import load_seed
 from recall_relay.core.models import (
     Agency,
     AgencyNotice,
@@ -38,14 +36,16 @@ from recall_relay.core.models import (
     Distribution,
     MatchVerdict,
     ProductLine,
+    RecallNotice,
     Receipt,
     ReceiptChannel,
-    RecallNotice,
     ResponseStatus,
     Source,
     Verdict,
 )
+from recall_relay.core.seed import load_seed
 from recall_relay.core.store import Store
+from strands.models.model import Model
 
 HERO_URL = (
     "https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/"

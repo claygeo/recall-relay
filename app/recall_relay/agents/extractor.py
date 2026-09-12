@@ -146,8 +146,8 @@ def needs_extraction(notice: RecallNotice, threshold: float = 0.8) -> bool:
 
 
 __all__ = [
-    "ExtractedNotice",
     "SYSTEM_PROMPT",
+    "ExtractedNotice",
     "build_extractor_agent",
     "extract_notice",
     "needs_extraction",
