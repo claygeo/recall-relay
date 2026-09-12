@@ -1,45 +1,45 @@
 flowchart LR
   subgraph Sources["Recall sources (keyless, public)"]
-    S1["Forwarded alert / pasted URL / PDF\n(the notice the food bank already gets)"]
-    S2["FDA press-release RSS\n(same day) + press page"]
-    S3["openFDA enforcement\n(weekly, enrichment only)"]
+    S1["Forwarded alert / pasted URL / PDF<br/>(the notice the food bank already gets)"]
+    S2["FDA press-release RSS<br/>(same day) + press page"]
+    S3["openFDA enforcement<br/>(weekly ledger: sweep + enrichment)"]
   end
 
   subgraph Intake["Deterministic intake (no model)"]
-    I1["fetch_url\nbrowser UA, cache, abuse-wall detect"]
-    I2["parse_fda_press_page / parse_text\nUPCs as printed, lots, best-by,\nstates, disposition verbatim"]
-    I3["to_recall_notice\nconfidence < 0.8 -> Extractor agent"]
+    I1["fetch_url<br/>browser UA, cache, abuse-wall detect"]
+    I2["parse_fda_press_page / parse_text<br/>UPCs as printed, lots, best-by,<br/>states, disposition verbatim"]
+    I3["to_recall_notice<br/>confidence below 0.8 goes to the Extractor agent"]
   end
 
   subgraph Strands["Strands Agents (orchestrator + agents-as-tools)"]
-    O["Orchestrator Agent\n@tool functions run the procedure"]
-    T1["score_candidates\nrules 3/4/7/8, rapidfuzz, top-k only"]
-    M["Matcher agent-as-tool\nstructured_output: MatchVerdict\nMATCH / NO_MATCH / NEEDS_HUMAN"]
-    W["Notice writer agent-as-tool\nstructured_output: AgencyNotice, ClientSign\n(disposition copied verbatim)"]
-    H["Hooks\nAuditHook: audit row per tool call\nApprovalGuard: cancel send_notices\nunless approved_at"]
+    O["Orchestrator Agent<br/>@tool functions run the procedure"]
+    T1["score_candidates<br/>rules 3/4/7/8, rapidfuzz, top-k only"]
+    M["Matcher agent-as-tool<br/>structured_output: MatchVerdict<br/>MATCH / NO_MATCH / NEEDS_HUMAN"]
+    W["Notice writer agent-as-tool<br/>structured_output: AgencyNotice, ClientSign<br/>(disposition copied verbatim)"]
+    H["Hooks<br/>AuditHook: audit row per tool call<br/>ApprovalGuard: cancel send_notices<br/>unless approved_at"]
   end
 
   subgraph Register["System of record (FastAPI + SQLite)"]
-    L["Receiving ledger\n+ distribution log"]
-    C["Recall case register\nverdicts, pull list, HOLD tags,\nnotices, responses, follow-ups, audit"]
-    D["Coordinator decisions\n(remembered, rule 14)"]
+    L["Receiving ledger<br/>+ distribution log"]
+    C["Recall case register<br/>verdicts, pull list, HOLD tags,<br/>notices, responses, follow-ups, audit"]
+    D["Coordinator decisions<br/>(remembered, rule 14)"]
   end
 
   subgraph People["The people"]
-    K["Coordinator\nONE decision per case:\nSend?"]
-    A["Partner pantries\n(12 agencies, volunteer-run)\none-click: pulled / never received /\nalready distributed / need pickup"]
-    P["Households\nshelf sign EN / ES / HT"]
+    K["Coordinator<br/>ONE decision per case:<br/>Send?"]
+    A["Partner pantries<br/>(12 agencies, volunteer-run)<br/>one click: pulled / never received /<br/>already distributed / need pickup"]
+    P["Households<br/>shelf sign EN / ES / HT"]
   end
 
   subgraph AWS["AWS"]
-    R["Amazon Bedrock AgentCore Runtime\nCodeZip deploy, stateless\ncalls the register over REST"]
-    B["Amazon Bedrock\nClaude (Sonnet) via Strands BedrockModel"]
+    R["Amazon Bedrock AgentCore Runtime<br/>CodeZip deploy, stateless<br/>calls the register over REST"]
+    B["Amazon Bedrock<br/>Claude via Strands BedrockModel"]
   end
 
   S1 --> I1
   S2 --> I1
+  S3 --> I3
   I1 --> I2 --> I3 --> O
-  S3 -. enrich .-> C
   O --> T1 --> M
   O --> W
   H -. guards .- O
@@ -52,6 +52,6 @@ flowchart LR
   C -- notices + follow-ups --> A
   A -- responses --> C
   A -- already distributed --> P
-  C --> X["Audit packet\n(PDF, on close)"]
+  C --> X["Audit packet<br/>(PDF, on close)"]
   R --- O
   B --- O

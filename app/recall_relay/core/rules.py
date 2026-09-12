@@ -252,7 +252,7 @@ def distribution_gate(notice: RecallNotice, food_bank_state: str, ledger_brands:
 # Rule 6: regulatory scope
 # ---------------------------------------------------------------------------
 NON_FOOD_HINTS = re.compile(
-    r"\b(drug|drugs|injection|tablet|capsule|medical device|device|firmware|supplement for dogs|pet food|dog food|cat food|cosmetic|vape|tobacco)\b",
+    r"\b(drug|drugs|injection|tablet|capsule|medical|device|firmware|apap|cpap|supplement for dogs|pet food|dog food|cat food|cosmetic|vape|tobacco)\b",
     re.I,
 )
 
